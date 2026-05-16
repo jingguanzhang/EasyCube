@@ -1,0 +1,4083 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyCube魔方求解器</title>
+  <link rel="stylesheet" href="./all.min.css" />
+  <link rel="stylesheet" href="./cropper.min.css" />
+  <link rel="stylesheet" href="./webfonts/iconfont.css" />
+  <script src="./tailwindcss.js"></script>
+  <script src="./three.min.js"></script>
+  <script src="./cube.min.js"></script>
+  <script src="./solve.min.js"></script>
+  <script src="./cropper.min.js"></script>
+  <script src="./rubiks-cube-solver.js"></script>
+  <script src="./toast.js"></script>
+  <script src="./jspdf.umd.min.js"></script>
+  <script src="./AlibabaPuHuiTi-normal.js"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { theme: "#f97316", "theme-hover": "#ea580c" } } },
+    };
+  </script>
+  <style>
+    /* ===== 魔方展开图网格布局 ===== */
+    .pos-U {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .pos-L {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .pos-F {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .pos-R {
+      grid-column: 3;
+      grid-row: 2;
+    }
+
+    .pos-B {
+      grid-column: 4;
+      grid-row: 2;
+    }
+
+    .pos-D {
+      grid-column: 2;
+      grid-row: 3;
+    }
+
+    /* 展开图面标签 */
+    .net-face {
+      position: relative;
+    }
+
+    .net-face::after {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: rgba(0, 0, 0, 0.15);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #net-U::after {
+      content: "U";
+    }
+
+    #net-L::after {
+      content: "L";
+    }
+
+    #net-F::after {
+      content: "F";
+    }
+
+    #net-R::after {
+      content: "R";
+    }
+
+    #net-B::after {
+      content: "B";
+    }
+
+    #net-D::after {
+      content: "D";
+    }
+
+    .net-cell:hover {
+      filter: brightness(0.9);
+      transform: scale(0.95);
+    }
+
+    .net-cell.unpainted {
+      background: repeating-linear-gradient(45deg, #e5e7eb, #e5e7eb 4px, #cbd5e1 4px, #cbd5e1 8px);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+    }
+
+    /* ===== 左侧步骤面板 ===== */
+    #left-panel {
+      transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #left-panel-resizer::after {
+      content: "⋮";
+      position: absolute;
+      top: 50%;
+      right: -4px;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 36px;
+      border-radius: 4px;
+      background: #e5e7eb;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: 0.2s;
+    }
+
+    #left-panel-resizer:hover::after,
+    #left-panel-resizer.dragging::after {
+      background: #f97316;
+      color: white;
+    }
+
+    #left-panel-resizer:hover,
+    #left-panel-resizer.dragging {
+      background: rgba(249, 115, 22, 0.12);
+    }
+
+    /* 虚拟列表步骤项 */
+    .step-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px;
+      border-radius: 8px;
+      border-width: 1px;
+      border-style: solid;
+      font-size: 0.875rem;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+      height: 40px;
+      margin-bottom: 4px;
+      box-sizing: border-box;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .step-item.step-active {
+      border-color: #f97316;
+      background-color: #fff7ed;
+      color: #c2410c;
+    }
+
+    .step-item.step-inactive {
+      border-color: #f3f4f6;
+      background-color: #ffffff;
+      color: #4b5563;
+    }
+
+    .step-item:hover {
+      border-color: #fdba74;
+      background-color: #fff7ed;
+    }
+
+    .step-num {
+      font-weight: bold;
+      color: #9ca3af;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+
+    .step-desc {
+      flex: 1;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .step-badge {
+      font-family: monospace;
+      background: #f3f4f6;
+      color: #ea580c;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+
+    /* ===== 右侧面板拖拽条 ===== */
+    #panel-resizer::after {
+      content: "⋮";
+      position: absolute;
+      top: 50%;
+      left: -4px;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 36px;
+      border-radius: 4px;
+      background: #e5e7eb;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: 0.2s;
+    }
+
+    #panel-resizer:hover::after,
+    #panel-resizer.dragging::after {
+      background: #f97316;
+      color: white;
+    }
+
+    #panel-resizer:hover,
+    #panel-resizer.dragging {
+      background: rgba(249, 115, 22, 0.12);
+    }
+
+    /* ===== 速度滑块 ===== */
+    #speed-slider {
+      appearance: none;
+      width: 90px;
+      height: 4px;
+      border-radius: 2px;
+      background: #e5e7eb;
+      outline: none;
+      cursor: pointer;
+    }
+
+    #speed-slider::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f97316;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    #speed-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* ===== 3D 场景 ===== */
+    #scene-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* ===== 方向指示器 (Gizmo) ===== */
+    #cube-gizmo {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      width: 90px;
+      height: 90px;
+      z-index: 50;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #cube-gizmo canvas {
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 10px;
+    }
+
+    #gizmo-tooltip {
+      position: absolute;
+      top: 108px;
+      left: 14px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 51;
+      white-space: nowrap;
+    }
+
+    /* ===== 调色板与按钮 ===== */
+    .color-swatch {
+      transition: transform 0.2s, border 0.2s;
+    }
+
+    .color-swatch.active {
+      transform: scale(1.2);
+      border: 3px solid #1f2937;
+      z-index: 10;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .color-swatch.disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .cube-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-btn i,
+    .cube-btn i {
+      pointer-events: none;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: #f97316;
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .tab:hover {
+      color: #f97316;
+    }
+
+    .tab.active-tab {
+      color: #f97316 !important;
+      border-bottom-color: #f97316 !important;
+      background: #fffaf5 !important;
+    }
+
+    /* ===== 面扫描按钮 ===== */
+    .face-scan-btn {
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      background: #1f2937;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 20;
+      transition: 0.2s;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    }
+
+    .face-scan-btn:hover {
+      transform: scale(1.15);
+      background: #f97316;
+    }
+
+    .btn-pos-top {
+      top: -32px;
+      left: 50%;
+      margin-left: -13px;
+    }
+
+    .btn-pos-left {
+      left: -32px;
+      top: 50%;
+      margin-top: -13px;
+    }
+
+    .btn-pos-right {
+      bottom: -32px;
+      right: -32px;
+    }
+
+    /* ===== 相机扫描模态框 ===== */
+    #camera-grid {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      height: 50%;
+      aspect-ratio: 1 / 1;
+      pointer-events: none;
+      display: grid;
+      border: 2px solid #f97316;
+      box-sizing: border-box;
+    }
+
+    .camera-cell {
+      border: 1px dashed rgba(255, 255, 255, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .camera-dot {
+      width: 14px;
+      height: 14px;
+      background: #f97316;
+      border-radius: 50%;
+      box-shadow: 0 0 4px white;
+      transition: background-color 0.2s ease;
+    }
+
+    .preview-grid {
+      display: grid;
+      gap: 4px;
+      background: #374151;
+      width: 240px;
+      height: 240px;
+      margin: 0 auto;
+    }
+
+    /* ===== 步骤旋转提示卡片 ===== */
+    #move-hint-card {
+      position: fixed;
+      top: 72px;
+      right: 10px;
+      z-index: 200;
+      background: white;
+      border: 2px solid #f97316;
+      border-radius: 16px;
+      padding: 14px 18px;
+      box-shadow: 0 8px 32px rgba(249, 115, 22, 0.18);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    #move-hint-card.visible {
+      display: flex;
+    }
+
+    #move-hint-card .hint-cols {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      align-items: center;
+    }
+
+    #move-hint-card .hint-col {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #move-hint-card .hint-icon {
+      font-size: 2.8rem;
+      color: #f97316;
+      line-height: 1;
+    }
+
+    #move-hint-card .hint-deg {
+      position: absolute;
+      top: 50%;
+      left: 51%;
+      transform: translate(-50%, -50%);
+      font-size: 0.85rem;
+      font-weight: 900;
+      color: #1f2937;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    #move-hint-card .hint-label {
+      font-size: 0.72rem;
+      color: #9ca3af;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    /* ===== 关于弹窗 ===== */
+    .about-tab {
+      flex: 1;
+      padding: 9px 0;
+      font-weight: 700;
+      font-size: 0.92rem;
+      border: none;
+      background: none;
+      cursor: pointer;
+      margin-bottom: -2px;
+      transition: color 0.15s;
+      border-bottom: 2px solid transparent;
+    }
+
+    .about-tab-active {
+      color: #f97316;
+      border-bottom-color: #f97316;
+    }
+
+    .about-tab-inactive {
+      color: #9ca3af;
+      border-bottom-color: transparent;
+    }
+
+    /* ===== 滚动条 ===== */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #94a3b8 transparent;
+    }
+  </style>
+  <base target="_blank" />
+</head>
+
+<body class="m-0 p-0 bg-gray-100 text-gray-800 font-sans flex flex-col h-screen overflow-hidden select-none">
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <div id="top-bar"
+    class="flex justify-between items-center bg-white px-5 shadow-sm z-50 h-[60px] border-b border-gray-200 relative">
+    <div class="flex items-center gap-2.5 font-semibold">
+      <i class="fas fa-cube text-orange-500"></i> <span>魔方阶数:</span>
+      <select id="dim-select" onchange="onDimSelectChange(this.value)"
+        class="py-1.5 px-2 bg-white border border-gray-300 rounded-md text-center font-bold outline-none focus:border-orange-500 cursor-pointer">
+        <option value="2">2×2</option>
+        <option value="3" selected>3×3</option>
+        <option value="4">4×4</option>
+        <option value="5">5×5</option>
+        <option value="6">6×6</option>
+        <option value="7">7×7</option>
+        <option value="8">8×8</option>
+        <option value="9">9×9</option>
+        <option value="10">10×10</option>
+        <option value="11">11×11</option>
+        <option value="12">12×12</option>
+        <option value="13">13×13</option>
+        <option value="14">14×14</option>
+        <option value="15">15×15</option>
+        <option value="custom">自定义</option>
+      </select>
+      <input type="number" id="dim-input" value="3" min="2" max="50" onchange="onDimCustomChange()" placeholder="2~50"
+        class="w-[60px] py-1.5 px-1 bg-white border border-orange-400 rounded-md text-center font-bold outline-none focus:border-orange-500 hidden" />
+
+
+      <div id="solver-settings-container"
+        class="flex items-center gap-4 ml-3 border-l border-gray-200 pl-4 transition-opacity duration-300">
+        <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-600"
+          title="开启: Kociemba极速算法&#10;关闭: IDA*算法搜索(步数少，适合15步以内打乱)">
+          <span>快速模式</span>
+          <div class="relative">
+            <input type="checkbox" id="fast-mode-toggle" class="sr-only peer" checked
+              onchange="const w=document.getElementById('solver-timeout-wrapper'); this.checked ? (w.classList.add('hidden'), w.classList.remove('flex')) : (w.classList.remove('hidden'), w.classList.add('flex'))">
+            <div
+              class="w-9 h-5 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500">
+            </div>
+          </div>
+        </label>
+
+        <div id="solver-timeout-wrapper"
+          class="items-center gap-1 text-sm text-gray-600 transition-all duration-200 hidden" title="IDA* 搜索超时时间">
+          超时
+          <input type="number" id="solver-timeout-input" value="180" min="1" max="999"
+            class="w-[3.5em] py-1 border border-gray-300 rounded text-center outline-none focus:border-orange-500" />
+          秒
+        </div>
+      </div>
+
+    </div>
+    <div
+      class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+      <img src="./logo.png" class="w-8 h-8 object-contain rounded-md" />
+      <span class="text-xl font-extrabold text-gray-800 tracking-tight">EasyCube 易魔方</span>
+    </div>
+    <div class="tabs flex h-full">
+      <div id="tab-free"
+        class="tab active-tab flex items-center gap-2 px-6 cursor-pointer font-semibold text-gray-500 border-b-[3px] border-transparent transition-colors"
+        onclick="switchMode('free')">
+        <i class="fas fa-hand-pointer"></i> 自由模式
+      </div>
+      <div id="tab-custom"
+        class="tab flex items-center gap-2 px-6 cursor-pointer font-semibold text-gray-500 border-b-[3px] border-transparent transition-colors"
+        onclick="switchMode('custom')">
+        <i class="fas fa-palette"></i> 自定义模式
+      </div>
+    </div>
+  </div>
+  <!-- ==================== 主内容区域 ==================== -->
+  <div id="main-content" class="flex flex-1 relative overflow-hidden">
+
+    <!-- 左侧：求解步骤面板 -->
+    <div id="left-panel"
+      class="min-w-[220px] w-[335px] bg-white border-r border-gray-200 hidden flex-col z-10 shadow-sm relative flex-shrink-0 transition-all">
+      <div id="left-panel-resizer" class="absolute right-0 top-0 w-[6px] h-full cursor-ew-resize transition-colors z-50"
+        title="拖拽调整面板宽度"></div>
+
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 text-orange-500 bg-white">
+        <div class="flex items-center gap-2 text-base font-semibold"><i class="fas fa-list-ol"></i> 求解步骤</div>
+        <button onclick="toggleLeftPanel(true)"
+          class="text-gray-400 hover:text-orange-500 transition-colors pr-2 cursor-pointer" title="收起面板">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+      </div>
+      <div id="step-list" class="flex-1 overflow-y-auto p-2 space-y-1 bg-gray-50"></div>
+    </div>
+
+    <button id="btn-expand-left" onclick="toggleLeftPanel(false)"
+      class="absolute top-1/2 -translate-y-1/2 bg-white border border-gray-200 border-l-0 rounded-r-lg py-4 px-1.5 shadow-md text-orange-500 z-[60] hover:bg-orange-50 transition-all duration-300 cursor-pointer"
+      style="left: -50px" title="展开步骤列表">
+      <i class="fas fa-chevron-right"></i>
+    </button>
+    <input type="file" id="import-input" accept=".rsteps" class="hidden" onchange="importState(event)" />
+
+    <!-- 中央：3D 视图 -->
+    <div id="scene-container" class="flex-1 relative overflow-hidden">
+      <div id="cube" class="hidden"></div>
+      <div id="cube-gizmo"></div>
+      <div id="gizmo-tooltip"></div>
+      <div id="loading-overlay"
+        class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 hidden flex-col items-center justify-center">
+        <i class="fas fa-spinner fa-spin text-4xl text-orange-500 mb-4"></i>
+        <div class="text-gray-700 font-semibold text-lg" id="loading-text">正在求解...</div>
+        <button id="btn-cancel-solve" onclick="cancelSolve()"
+          class="text-red-800 text-sm cursor-pointer m-1 p-1">取消求解</button>
+      </div>
+      <div id="free-controls"
+        class="absolute bottom-8 left-8 flex gap-3 z-10 bg-white/80 p-2.5 rounded-xl shadow-sm backdrop-blur border border-gray-200">
+        <button
+          class="cube-btn flex items-center gap-2 py-2.5 px-4 border border-orange-200 text-orange-600 hover:bg-orange-50 rounded-lg bg-white font-semibold text-sm transition-colors"
+          onclick="document.getElementById('import-input').click()" title="加载进度">
+          <i class="fas fa-folder-open"></i> 加载
+        </button>
+        <button
+          class="cube-btn flex items-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white font-semibold text-sm"
+          onclick="initCube()"><i class="fas fa-sync-alt"></i> 重置</button>
+        <button
+          class="cube-btn flex items-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white font-semibold text-sm"
+          onclick="scrambleCube()"><i class="fas fa-random"></i> 打乱</button>
+
+        <button id="btn-solve-free"
+          class="cube-btn cube-btn-primary flex items-center gap-2 py-2.5 px-4 border border-orange-500 rounded-lg bg-orange-500 text-white font-semibold text-sm opacity-50 cursor-not-allowed"
+          disabled  onclick="initSolve('free')">
+          <i class="fas fa-gears"></i> 求解
+        </button>
+      </div>
+      <!-- 右上角步骤旋转提示卡片 -->
+      <div id="move-hint-card"></div>
+      <div id="navigator"
+        class="w-max absolute bottom-8 left-1/2 -translate-x-1/2 bg-white border border-gray-200 px-6 py-3 rounded-[30px] hidden gap-4 items-center shadow-xl z-50 flex-wrap justify-center max-w-[90vw]">
+        <button class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-gray-100"
+          id="btn-prev" onclick="playStep(-1)" disabled>
+          <i class="fas fa-step-backward"></i>
+        </button>
+        <button
+          class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-orange-500 text-white"
+          id="btn-play" onclick="togglePlay()">
+          <i class="fas fa-play"></i>
+        </button>
+        <button class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-gray-100"
+          id="btn-next" onclick="playStep(1)">
+          <i class="fas fa-step-forward"></i>
+        </button>
+        <span id="nav-text"
+          class="font-mono text-[15px] min-w-[300px] text-center font-semibold flex items-center justify-center gap-1.5 flex-wrap">
+          <span id="nav-algo-prefix" class="text-gray-500 text-sm"></span>
+          <input id="nav-step-input" type="number" min="0"
+            class="min-w-[1em] text-center border border-gray-100 rounded-md p-0.5 font-mono font-bold text-orange-600 outline-none focus:border-orange-400 bg-white/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            title="输入步骤数跳转（回车确认）" onchange="onNavStepInputChange(this)"
+            onkeydown="if(event.key==='Enter'){onNavStepInputChange(this);this.blur();}" />
+          <span id="nav-total-text" class="text-gray-600"></span>
+          <span id="nav-move-text" class="text-orange-500 font-bold"></span>
+        </span>
+        <div id="speed-control" class="flex items-center gap-2 border-l border-gray-200 pl-4">
+          <label class="text-xs text-gray-500 font-semibold"> <i class="fas fa-tachometer-alt"></i> 速度 </label>
+          <input type="range" id="speed-slider" min="1" max="11" step="1" value="3"
+            oninput="onSpeedChange(this.value)" />
+          <span id="speed-label" class="text-xs font-bold text-orange-500 min-w-[32px]">正常</span>
+        </div>
+        <button
+          class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-orange-100 text-orange-500"
+          onclick="exportState()" title="导出进度">
+          <i class="fas fa-hourglass-half"></i>
+        </button>
+        <button
+          class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-orange-100 text-orange-500"
+          onclick="exportStepsPDF()" title="导出教程(PDF)">
+          <i class="fas fa-book"></i>
+        </button>
+        <button
+          class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-red-100 text-red-500"
+          onclick="closeNavigator()" title="退出求解">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    <!-- 右侧：2D 涂色面板 -->
+    <div id="right-panel"
+      class="w-[40vw] min-w-[280px] max-w-[80vw] bg-white border-l border-gray-200 hidden z-20 flex-col p-6 box-border overflow-y-auto shadow-sm relative flex-shrink-0">
+      <div id="panel-resizer" class="absolute left-0 top-0 w-[6px] h-full cursor-ew-resize transition-colors"
+        title="拖拽调整面板宽度"></div>
+      <div class="flex items-center justify-between mb-4 border-b border-gray-200 pb-3">
+        <div class="flex items-center gap-2 text-base font-semibold text-orange-500"><i class="fas fa-paint-brush"></i>
+          快速涂色</div>
+      </div>
+      <!-- 固定调色板 -->
+      <div id="fixed-palette" class="flex gap-2 justify-center flex-wrap m-5"></div>
+      <!-- 2D 展开图 -->
+      <div id="net-container" class="grid gap-1.5 mb-5 [grid-template-columns:repeat(4,1fr)] [aspect-ratio:4/3]">
+        <div class="relative pos-U">
+          <div
+            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
+            id="net-U"></div>
+          <button class="face-scan-btn btn-pos-left" title="扫描 U 面（顶面）" onclick="openCameraModal('U')">
+            <i class="fas fa-camera"></i>
+          </button>
+        </div>
+        <!-- L 面 (左面) -->
+        <div class="relative pos-L">
+          <div
+            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
+            id="net-L"></div>
+          <button class="face-scan-btn btn-pos-top" title="扫描 L 面（左面）" onclick="openCameraModal('L')">
+            <i class="fas fa-camera"></i>
+          </button>
+        </div>
+        <!-- F 面 (前面，中心位置) -->
+        <div class="relative pos-F">
+          <div
+            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
+            id="net-F"></div>
+          <button class="face-scan-btn btn-pos-right" title="扫描 F 面（前面）" onclick="openCameraModal('F')">
+            <i class="fas fa-camera"></i>
+          </button>
+        </div>
+        <!-- R 面 (右面) -->
+        <div class="relative pos-R">
+          <div
+            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
+            id="net-R"></div>
+          <button class="face-scan-btn btn-pos-top" title="扫描 R 面（右面）" onclick="openCameraModal('R')">
+            <i class="fas fa-camera"></i>
+          </button>
+        </div>
+        <!-- B 面 (后面) -->
+        <div class="relative pos-B">
+          <div
+            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
+            id="net-B"></div>
+          <button class="face-scan-btn btn-pos-top" title="扫描 B 面（后面）" onclick="openCameraModal('B')">
+            <i class="fas fa-camera"></i>
+          </button>
+        </div>
+        <!-- D 面 (底面，位于底部) -->
+        <div class="relative pos-D">
+          <div
+            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
+            id="net-D"></div>
+          <button class="face-scan-btn btn-pos-left" title="扫描 D 面（底面）" onclick="openCameraModal('D')">
+            <i class="fas fa-camera"></i>
+          </button>
+        </div>
+      </div>
+      <div id="status-text" class="text-center text-gray-500 text-[13px] mt-1 font-medium">已填充: 0 / 54</div>
+      <button id="btn-solve-custom"
+        class="cube-btn cube-btn-primary flex items-center justify-center gap-2 py-2.5 px-4 border border-orange-500 rounded-lg bg-orange-500 text-white cursor-pointer font-semibold text-sm transition-all w-full mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled onclick="initSolve('custom')">
+        <i class="fas fa-lock"></i> 完成涂色后解锁
+      </button>
+    </div>
+  </div>
+  <!-- ==================== 相机扫描模态框 ==================== -->
+  <div id="camera-modal"
+    class="fixed inset-0 bg-black/80 z-[100] hidden flex-col items-center justify-center backdrop-blur-sm">
+    <div class="bg-white p-5 rounded-2xl w-[90vw] max-w-[450px] shadow-2xl flex flex-col max-h-[95vh]">
+      <div class="flex justify-between items-center mb-4 flex-shrink-0">
+        <h3 class="text-lg font-bold text-gray-800" id="scan-modal-title">图像取色</h3>
+        <button onclick="closeCameraModal()" class="text-gray-400 hover:text-red-500 text-xl">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <!-- 选项卡 -->
+      <div class="flex mb-4 flex-shrink-0" id="scan-tabs">
+        <button onclick="switchScanTab('camera')" id="tab-camera"
+          class="flex-1 py-2.5 text-center font-bold text-orange-500 border-b-[3px] border-orange-500 outline-none">
+          <i class="fas fa-camera"></i> 相机拍摄
+        </button>
+        <button onclick="switchScanTab('upload')" id="tab-upload"
+          class="flex-1 py-2.5 text-center font-bold text-gray-400 border-b-[3px] border-transparent outline-none"><i
+            class="fas fa-image"></i> 图片上传</button>
+      </div>
+      <!-- 工作区 (扫描和截图操作) -->
+      <div id="scan-workspace" class="flex-1 overflow-y-auto flex flex-col items-center">
+        <!-- 相机区域 -->
+        <div id="area-camera" class="w-full flex flex-col items-center">
+          <div class="relative w-full aspect-square bg-black rounded-lg overflow-hidden mb-4">
+            <video id="camera-video" class="w-full h-full object-cover scale-x-[-1]" autoplay playsinline></video>
+            <div id="camera-grid"></div>
+          </div>
+          <p class="text-xs text-gray-500 text-center mb-4">请将魔方面完全对准网格，并确保中心点落在色块内 (注意避免强烈反光)。</p>
+          <button onclick="captureCameraColor()"
+            class="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition-colors shadow-md"><i
+              class="fas fa-crosshairs"></i> 抓取此面颜色</button>
+        </div>
+        <!-- 图片上传区域 -->
+        <div id="area-upload" class="w-full hidden flex-col items-center">
+          <label
+            class="w-full aspect-square cursor-pointer bg-gray-50 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center mb-4 transition-colors">
+            <i class="fas fa-cloud-upload-alt text-3xl text-orange-400 mb-2"></i>
+            <span class="text-sm text-gray-600 font-semibold">点击选择图片文件</span>
+            <input type="file" id="upload-input" accept="image/*" class="hidden" onchange="handleImageUpload(event)" />
+          </label>
+          <div id="cropper-wrapper" class="w-full hidden flex-col items-center">
+            <div class="w-full aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4 relative"
+              style="max-height: 350px">
+              <img id="cropper-image" class="max-w-full block" />
+            </div>
+            <p class="text-xs text-gray-500 text-center mb-4">请调整并缩放裁剪框，使其刚好框住整个魔方面。</p>
+            <button onclick="captureCropperColor()"
+              class="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition-colors shadow-md">
+              <i class="fas fa-crop-alt"></i> 抓取裁剪区域
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- 预览工作区 -->
+      <div id="area-preview" class="w-full hidden flex-col items-center py-2">
+        <h4 class="font-bold text-gray-800 mb-4 text-center">颜色提取预览</h4>
+        <div id="preview-grid" class="preview-grid rounded-lg overflow-hidden mb-5 border-4 border-gray-800 shadow-lg">
+        </div>
+        <p class="text-xs text-gray-500 text-center mb-5">请核对提取的颜色是否准确，确认应用后如有光照偏差可手动修正。</p>
+        <div class="flex gap-3 w-full">
+          <button onclick="retakeColor()"
+            class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors border border-gray-300">重新取色</button>
+          <button onclick="confirmCapturedColors()"
+            class="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg transition-colors shadow-md"><i
+              class="fas fa-check"></i> 确认应用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ==================== 关于 & 帮助弹窗 ==================== -->
+  <button id="about-fab" onclick="openAboutModal()" title="关于 & 帮助"
+    class="fixed right-[22px] bottom-[22px] z-5 w-11 h-11 rounded-full bg-orange-500 text-white border-none cursor-pointer shadow-[0_4px_16px_rgba(249,115,22,0.45)] flex items-center justify-center text-lg transition-all duration-200 hover:scale-110 hover:shadow-[0_6px_24px_rgba(249,115,22,0.6)]">
+    <i class="fas fa-question"></i>
+  </button>
+  <div id="about-modal" class="fixed inset-0 z-[300] bg-black/55 backdrop-blur-sm items-center justify-center hidden">
+    <div class="bg-white rounded-2xl w-[92vw] max-w-[800px] h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- 弹窗标题栏 -->
+      <div class="flex items-center justify-between pt-5 px-5 shrink-0">
+        <div class="flex items-center gap-2 font-bold text-base text-gray-800"><i
+            class="fas fa-cube text-orange-500"></i>EasyCube 易魔方
+        </div>
+        <button onclick="closeAboutModal()"
+          class="bg-transparent border-none cursor-pointer text-gray-400 text-xl leading-none p-1 rounded-md hover:text-red-500 transition-colors">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <!-- Tab 切换 -->
+      <div class="flex mx-5 mt-3 border-b-2 border-gray-100 shrink-0">
+        <button id="about-tab-btn-about" onclick="switchAboutTab('about')" class="about-tab about-tab-active"><i
+            class="fas fa-info-circle"></i> 关于</button>
+        <button id="about-tab-btn-help" onclick="switchAboutTab('help')" class="about-tab about-tab-inactive"><i
+            class="fas fa-book-open"></i> 帮助</button>
+      </div>
+      <!-- Tab 内容 -->
+      <div class="overflow-y-auto p-5 flex-1">
+        <!-- 关于 -->
+        <div id="about-tab-about">
+          <div class="text-center my-6 flex justify-center items-center gap-1">
+            <img src="./logo.png" class="w-14 object-contain rounded-md" />
+            <div class="text-2xl font-extrabold text-gray-800">EasyCube 易魔方</div>
+          </div>
+          <p class="text-sm text-gray-600 mb-4 px-8 leading-loose text-justify indent-8"><b>EasyCube
+              易魔方</b>是一款免费且易用的多阶魔方还原工具，支持 2~50 超多阶数求解。内置国际主流算法，可快速解算还原步骤，并通过 3D
+            动画实时演示每一步操作，让复杂魔方也能轻松还原。应用支持自由打乱、自定义涂色、步骤播放、进度保存、PDF
+            教程导出等丰富功能，无论是魔方新手还是进阶玩家，都能快速掌握还原技巧。更支持相机扫描与图片识别等功能，助你随时随地练习与挑战魔方。</p>
+          <p class="text-sm text-gray-600 mb-8 px-10 leading-loose text-justify indent-8">
+            本程序为<b>完全免费</b>程序，无任何限制，用户无需支付任何费用。如果您通过电商平台、闲鱼或其他任何渠道付费购买或获得本程序，请及时联系卖家要求退款，本程序作者从未授权任何第三方进行收费销售。</p>
+          <div class="mx-20 text-center pointer-events-none">
+            <img src="./support.jpg" class="w-full h-auto ">
+          </div>
+          </p>
+        </div>
+        <!-- 帮助 -->
+        <div id="about-tab-help" class="hidden">
+          <div class="flex flex-col gap-5 text-sm text-gray-600">
+
+            <!-- 快速上手 -->
+            <div>
+              <div class="font-bold text-orange-500 text-base flex items-center gap-2 mb-3">
+                <i class="fas fa-rocket"></i> 快速上手
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <!-- 自由模式 -->
+                <div class="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <div class="font-bold text-gray-800 text-sm mb-2 flex items-center gap-1.5">
+                    <i class="fas fa-hand-pointer text-orange-500"></i> 自由模式
+                  </div>
+                  <ol class="m-0 pl-5 space-y-1.5 text-xs text-gray-600 leading-relaxed">
+                    <li>选择魔方阶数（2×2 ~ 50×50）</li>
+                    <li>点击 <b>打乱</b> 生成随机状态</li>
+                    <li>点击 <b>求解</b> 启动算法</li>
+                    <li>使用底部导航栏 <b>播放 / 逐步</b> 查看还原</li>
+                    <li>左侧步骤列表可 <b>点击跳转</b> 到任意步骤</li>
+                  </ol>
+                </div>
+                <!-- 自定义模式 -->
+                <div class="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <div class="font-bold text-gray-800 text-sm mb-2 flex items-center gap-1.5">
+                    <i class="fas fa-palette text-orange-500"></i> 自定义模式
+                  </div>
+                  <ol class="m-0 pl-5 space-y-1.5 text-xs text-gray-600 leading-relaxed">
+                    <li>切换到 <b>自定义模式</b></li>
+                    <li>在右侧 2D 展开图上 <b>手动涂色</b></li>
+                    <li>或点击面旁 <i class="fas fa-camera text-[10px]"></i> 用 <b>相机 / 图片</b> 自动识别</li>
+                    <li>每种颜色填满 N×N 块后自动解锁求解</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+
+            <!-- 键盘快捷键 -->
+            <div>
+              <div class="font-bold text-orange-500 text-base flex items-center gap-2 mb-3">
+                <i class="fas fa-keyboard"></i> 键盘快捷键
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+
+                <!-- 视角切换（合并版） -->
+                <div class="border border-gray-200 rounded-xl overflow-hidden">
+                  <div class="bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wide">
+                    视角切换
+                  </div>
+                  <div class="divide-y divide-gray-100 text-xs">
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">顶视图</span>
+                      <div><kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">U</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">8</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">底视图</span>
+                      <div><kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">D</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">2</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">前视图</span>
+                      <div><kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">F</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">5</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">后视图</span>
+                      <div><kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">B</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">0</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">右视图</span>
+                      <div><kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">R</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">6</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">左视图</span>
+                      <div><kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">L</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">4</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">左前俯角</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">1</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">右后仰角</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">3</kbd>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="border border-gray-200 rounded-xl overflow-hidden text-xs">
+                  <div class="bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wide">
+                    操作快捷键
+                  </div>
+                  <div class="divide-y divide-gray-100">
+                    <div class="flex items-center justify-between px-3 py-1.5">
+                      <span class="text-gray-600">后退一步</span>
+                      <kbd
+                        class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono text-[11px] shadow-sm">←</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-1.5">
+                      <span class="text-gray-600">前进一步</span>
+                      <kbd
+                        class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono text-[11px] shadow-sm">→</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">播放 / 暂停</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">P</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">跳转到第一步</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">Home</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">跳转到最后一步</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">End</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">调整速度</span>
+                      <div><kbd class="bg-white border border-gray-300 rounded px-1 py-0.5 font-mono shadow-sm">+</kbd>
+                        <span class="text-gray-400">/</span> <kbd
+                          class="bg-white border border-gray-300 rounded px-1 py-0.5 font-mono shadow-sm">-</kbd>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">打乱魔方</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">Space</kbd>
+                    </div>
+                    <div class="flex items-center justify-between px-3 py-2">
+                      <span class="text-gray-600">开始求解</span>
+                      <kbd class="bg-white border border-gray-300 rounded px-1.5 py-0.5 font-mono shadow-sm">S</kbd>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // ============================================================
+    // [0] 通知系统初始化
+    // ============================================================
+    Toast.config({ position: "top-right", duration: 3500 });
+
+    function showNotify(msg, type = "error") {
+      if (type === "success") Toast.success(msg);
+      else if (type === "warning") Toast.warning(msg);
+      else if (type === "info" || type === "tip") Toast.info(msg);
+      else Toast.error(msg);
+    }
+
+    function showConfirm(msg, onOk, onCancel) {
+      Toast.confirm({
+        message: msg,
+        onConfirm: onOk,
+        onCancel: onCancel || (() => { }),
+      });
+    }
+
+    // ============================================================================
+    // [1] Three.js 初始化与基础设置
+    // ============================================================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf3f4f6);
+
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const sceneContainer = document.getElementById("scene-container");
+    sceneContainer.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 3));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(5, -10, 7);
+    scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    fillLight.position.set(-5, 5, -7);
+    scene.add(fillLight);
+
+    const cubeGroup = new THREE.Group();
+    scene.add(cubeGroup);
+
+    function onWindowResize() {
+      const w = sceneContainer.clientWidth;
+      const h = sceneContainer.clientHeight;
+      if (w === 0 || h === 0) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    const resizeObserver = new ResizeObserver(() => onWindowResize());
+    resizeObserver.observe(sceneContainer);
+    onWindowResize();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (arrowMeshes && arrowMeshes.length > 0) {
+        const time = performance.now() * 0.005;
+        arrowMeshes.forEach((mesh) => {
+          const amplitude = (mesh.userData.baseSize || 0.35) * 0.08;
+          const offset = Math.sin(time) * amplitude;
+          if (mesh.userData.angle !== undefined) {
+            mesh.position.x = Math.cos(mesh.userData.angle) * offset;
+            mesh.position.y = Math.sin(mesh.userData.angle) * offset;
+          }
+        });
+      }
+      renderer.render(scene, camera);
+    }
+
+    // ============================================================================
+    // [2] 全局核心状态变量
+    // ============================================================================
+    let N = 3;
+    let mode = "free";
+    let cubies = [];
+    let isAnimating = false;
+    let isNavigating = false;
+    let stickerMeshes = [];
+    let faceLabelMeshes = [];
+    let arrowMeshes = [];
+    let sceneRotation = { x: 30, y: -45 };
+    let sceneScale = 1.0;
+    let isDraggingScene = false;
+    let prevMouse = { x: 0, y: 0 };
+    let dragInfo = null;
+    let solverWorkerInstance = null;
+    let currentWorkerResolve = null;
+    let isSolvingCanceled = false;
+
+    animate();
+
+    let moveHistory = [];
+    let solveQueue = [];
+    let solveType = "algorithmic";
+    let navState = { step: 0, playing: false, timer: null };
+    let isScrambled = false;
+    let isLeftPanelCollapsed = false;
+
+    const SPEED_LEVELS = [
+      [1000, 2800, "极慢"],      // 0
+      [900, 2200, "很慢"],      // 1
+      [650, 1600, "慢"],        // 2
+      [350, 1100, "较慢"],      // 3
+      [200, 650, "中等"],      // 4
+      [150, 380, "正常"],      // 5
+      [100, 220, "稍快"],      // 6
+      [50, 140, "快"],        // 7
+      [20, 0, "很快"],      // 8
+      [15, 0, "极速"],      // 9
+      [10, 0, "超快"],      // 10
+      [1, 0, "闪电"],      // 11
+    ];
+    let playSpeedLevel = 2;
+
+    function getNSpeedFactor() {
+      return Math.max(0.15, Math.min(1, 3 / N));
+    }
+    function getAnimSpeed() {
+      return Math.max(1, Math.round(SPEED_LEVELS[playSpeedLevel][0] * getNSpeedFactor()));
+    }
+    function getStepDelay() {
+      return Math.max(0, Math.round(SPEED_LEVELS[playSpeedLevel][1] * getNSpeedFactor()));
+    }
+    function getScrambleSpeed() {
+      return Math.max(8, Math.round(120 * getNSpeedFactor()));
+    }
+
+    function onSpeedChange(val) {
+      playSpeedLevel = parseInt(val) - 1;
+      document.getElementById("speed-label").textContent = SPEED_LEVELS[playSpeedLevel][2];
+    }
+
+    const COLORS = { U: "#FFFFFF", D: "#FFEA00", F: "#00C43E", B: "#0055FF", R: "#FF1A1A", L: "#FF7A00" };
+    const UNPAINTED = "#9ca3af";
+    const FACE_NORMALS = { U: [0, 1, 0], D: [0, -1, 0], L: [-1, 0, 0], R: [1, 0, 0], F: [0, 0, 1], B: [0, 0, -1] };
+
+    let customState = {};
+    let activePaintColor = COLORS.U;
+    const statusText = document.getElementById("status-text");
+    const navigatorUI = document.getElementById("navigator");
+
+    function solveWithIDAStar(stateStr, timeoutMs) {
+      return new Promise((resolve) => {
+        currentWorkerResolve = resolve;
+        if (!solverWorkerInstance) {
+          solverWorkerInstance = new Worker('./solver-worker.js', { type: 'module' });
+          solverWorkerInstance.onmessage = (e) => {
+            const msg = e.data;
+            if (msg.type === 'ready') {
+              document.getElementById("loading-text").innerText = "正在搜索最优解...";
+              solverWorkerInstance.postMessage({ type: 'solve', state: stateStr, timeoutMs: timeoutMs });
+            } else if (msg.type === 'solution') {
+              if (currentWorkerResolve) currentWorkerResolve(msg.names ? msg.names.join(' ') : '');
+            } else if (msg.type === 'timeout') {
+              if (currentWorkerResolve) currentWorkerResolve('error: timeout');
+            } else if (msg.type === 'error') {
+              if (currentWorkerResolve) currentWorkerResolve('error: ' + msg.message);
+            } else if (msg.type === 'progress') {
+              const el = document.getElementById("loading-text");
+              if (el) el.innerText = `加载剪枝表... ${Math.round(msg.percent)}%`;
+            }
+          };
+          solverWorkerInstance.postMessage({ type: 'init' });
+        } else {
+          document.getElementById("loading-text").innerText = "正在搜索最优解...";
+          solverWorkerInstance.postMessage({ type: 'solve', state: stateStr, timeoutMs: timeoutMs });
+        }
+      });
+    }
+
+    function cancelSolve() {
+      isSolvingCanceled = true;
+      if (solverWorkerInstance) {
+        solverWorkerInstance.terminate();
+        solverWorkerInstance = null;
+      }
+      if (currentWorkerResolve) {
+        currentWorkerResolve('error: canceled');
+        currentWorkerResolve = null;
+      }
+
+      // 取消 Kociemba / NxN / 捷径 等同步求解（设置标志，中断后续流程）
+      // isSolvingCanceled 已设为 true，initSolve 在 await 处会检查并 return
+
+      // 重置求解相关状态
+      solveQueue = [];
+      solveType = "algorithmic";
+      isNavigating = false;
+      navState.playing = false;
+      clearTimeout(navState.timer);
+      clearArrows();
+
+      // 隐藏 loading 与 navigator
+      document.getElementById("loading-overlay").classList.add("hidden");
+      document.getElementById("loading-overlay").classList.remove("flex");
+      const nav = document.getElementById("navigator");
+      nav.classList.add("hidden");
+      nav.classList.remove("flex");
+
+      // 恢复对应模式的控件
+      document.getElementById("free-controls").classList.toggle("hidden", mode !== "free");
+      document.getElementById("right-panel").classList.toggle("hidden", mode !== "custom");
+
+      const card = document.getElementById("move-hint-card");
+      if (card) card.classList.remove("visible");
+    }
+
+    // ============================================================================
+    // [3] 魔方构建与基础 UI 逻辑
+    // ============================================================================
+    function getBaseDist() {
+      const size = Math.max(0.35, 2.8 / N);
+      return N * size * 1.8 + 3;
+    }
+
+    function applyCubeTransform() {
+      const dist = getBaseDist() / sceneScale;
+      const radX = THREE.MathUtils.degToRad(sceneRotation.x);
+      const radY = THREE.MathUtils.degToRad(sceneRotation.y);
+      camera.position.x = dist * Math.sin(radY) * Math.cos(radX);
+      camera.position.y = dist * Math.sin(radX);
+      camera.position.z = dist * Math.cos(radY) * Math.cos(radX);
+      camera.lookAt(0, 0, 0);
+    }
+
+    renderer.domElement.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        sceneScale += e.deltaY * -0.0015;
+        sceneScale = Math.min(Math.max(0.2, sceneScale), 5.0);
+        applyCubeTransform();
+      },
+      { passive: false },
+    );
+
+    function createChevronTexture(isDouble) {
+      const size = 512;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, size, size);
+      ctx.lineWidth = size * 0.11;
+      ctx.strokeStyle = "#000000";
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      const scale = size / 128;
+      function drawChevron(yOffset) {
+        ctx.beginPath();
+        ctx.moveTo(32 * scale, (yOffset + 24) * scale);
+        ctx.lineTo(64 * scale, (yOffset - 24) * scale);
+        ctx.lineTo(96 * scale, (yOffset + 24) * scale);
+        ctx.stroke();
+      }
+
+      if (isDouble) {
+        drawChevron(76);
+        drawChevron(44);
+      } else {
+        drawChevron(64);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      texture.generateMipmaps = true;
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    const matArrowSingle = new THREE.MeshBasicMaterial({ map: createChevronTexture(false), transparent: true, depthWrite: false, opacity: 0.5 });
+
+    function onDimSelectChange(val) {
+      const customInput = document.getElementById("dim-input");
+      if (val === "custom") {
+        customInput.classList.remove("hidden");
+        customInput.focus();
+      } else {
+        customInput.classList.add("hidden");
+        customInput.value = val;
+        initCube();
+      }
+    }
+
+    function onDimCustomChange() {
+      const input = document.getElementById("dim-input");
+      let v = Math.min(50, Math.max(2, parseInt(input.value) || 3));
+      input.value = v;
+      const presets = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+      const sel = document.getElementById("dim-select");
+      if (presets.includes(v)) {
+        sel.value = String(v);
+        input.classList.add("hidden");
+      } else {
+        sel.value = "custom";
+      }
+      initCube();
+    }
+
+    function initCube() {
+      if (isAnimating) return;
+      if (typeof clearArrows === "function") clearArrows();
+      N = Math.min(50, Math.max(2, parseInt(document.getElementById("dim-input").value) || 3));
+      document.getElementById("dim-input").value = N;
+      isScrambled = false;
+      sceneScale = 1.0;
+
+      const settingsContainer = document.getElementById("solver-settings-container");
+      if (settingsContainer) {
+        settingsContainer.classList.toggle("hidden", !(N === 2 || N === 3));
+        settingsContainer.classList.toggle("flex", N === 2 || N === 3);
+      }
+
+      cubies.forEach((c) => {
+        cubeGroup.remove(c.mesh);
+        c.mesh.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) {
+            if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
+            else o.material.dispose();
+          }
+        });
+      });
+      faceLabelMeshes.forEach((mesh) => {
+        cubeGroup.remove(mesh);
+        mesh.geometry?.dispose();
+        mesh.material?.dispose();
+      });
+      faceLabelMeshes = [];
+      cubies = [];
+      stickerMeshes = [];
+      moveHistory = [];
+      customState = {};
+
+      const size = Math.max(0.35, 2.8 / N);
+      const offset = (N - 1) / 2;
+      const baseRadius = size * 0.015;
+
+      const createRoundedRectShape = (w, h, r) => {
+        const shape = new THREE.Shape();
+        const hw = w / 2,
+          hh = h / 2;
+        shape.moveTo(-hw + r, -hh);
+        shape.lineTo(hw - r, -hh);
+        shape.quadraticCurveTo(hw, -hh, hw, -hh + r);
+        shape.lineTo(hw, hh - r);
+        shape.quadraticCurveTo(hw, hh, hw - r, hh);
+        shape.lineTo(-hw + r, hh);
+        shape.quadraticCurveTo(-hw, hh, -hw, hh - r);
+        shape.lineTo(-hw, -hh + r);
+        shape.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
+        return shape;
+      };
+
+      const baseShape = createRoundedRectShape(size - baseRadius * 2, size - baseRadius * 2, baseRadius);
+      const baseGeo = new THREE.ExtrudeGeometry(baseShape, { depth: size - baseRadius * 2, bevelEnabled: true, bevelThickness: baseRadius, bevelSize: baseRadius, bevelSegments: 10 });
+      baseGeo.translate(0, 0, -(size - baseRadius * 2) / 2);
+
+      const stickerSize = size * 0.88;
+      const cornerRadius = stickerSize * 0.15;
+      const stickerGeo = new THREE.ShapeGeometry(createRoundedRectShape(stickerSize, stickerSize, cornerRadius));
+      const blackMat = new THREE.MeshPhysicalMaterial({ color: 0x1a1a1a, roughness: 0.85, metalness: 0.05 });
+
+      const faceDefs = {
+        U: { pos: [0, size / 2 + 0.005, 0], rot: [-Math.PI / 2, 0, 0], normal: [0, 1, 0] },
+        D: { pos: [0, -size / 2 - 0.005, 0], rot: [Math.PI / 2, 0, 0], normal: [0, -1, 0] },
+        F: { pos: [0, 0, size / 2 + 0.005], rot: [0, 0, 0], normal: [0, 0, 1] },
+        B: { pos: [0, 0, -size / 2 - 0.005], rot: [0, Math.PI, 0], normal: [0, 0, -1] },
+        L: { pos: [-size / 2 - 0.005, 0, 0], rot: [0, -Math.PI / 2, 0], normal: [-1, 0, 0] },
+        R: { pos: [size / 2 + 0.005, 0, 0], rot: [0, Math.PI / 2, 0], normal: [1, 0, 0] },
+      };
+
+      for (let x = 0; x < N; x++) {
+        for (let y = 0; y < N; y++) {
+          for (let z = 0; z < N; z++) {
+            if (x > 0 && x < N - 1 && y > 0 && y < N - 1 && z > 0 && z < N - 1) continue;
+            const cx = x - offset,
+              cy = y - offset,
+              cz = z - offset;
+            const group = new THREE.Group();
+            group.position.set(cx * size, cy * size, cz * size);
+
+            const baseMesh = new THREE.Mesh(baseGeo, blackMat);
+            baseMesh.userData = { isBase: true };
+            group.add(baseMesh);
+
+            const cubieObj = { lx: x, ly: y, lz: z, mesh: group, stickers: {} };
+
+            const addSticker = (face, isOuter, r, c) => {
+              if (!isOuter) return;
+              const fd = faceDefs[face];
+              const mat = new THREE.MeshLambertMaterial({ color: mode === "free" ? new THREE.Color(COLORS[face]) : new THREE.Color(UNPAINTED) });
+              const sticker = new THREE.Mesh(stickerGeo, mat);
+              sticker.position.set(...fd.pos);
+              sticker.rotation.set(...fd.rot);
+              sticker.userData = { face, r, c, cubie: cubieObj };
+
+              if (mode === "free") customState[`${face}-${r}-${c}`] = COLORS[face];
+
+              group.add(sticker);
+              stickerMeshes.push(sticker);
+              cubieObj.stickers[face] = { mesh: sticker, face, r, c, nx: fd.normal[0], ny: fd.normal[1], nz: fd.normal[2] };
+            };
+
+            addSticker("U", y === N - 1, N - 1 - z, x);
+            addSticker("D", y === 0, z, x);
+            addSticker("F", z === N - 1, y, x);
+            addSticker("B", z === 0, y, N - 1 - x);
+            addSticker("L", x === 0, y, z);
+            addSticker("R", x === N - 1, y, N - 1 - z);
+
+            cubies.push(cubieObj);
+            cubeGroup.add(group);
+          }
+        }
+      }
+      applyCubeTransform();
+      build2DNet();
+      initPalette();
+      updateCustomUI();
+      createFaceLabels();
+      closeNavigator();
+      updateSolveButtonState();
+    }
+
+    function updateSolveButtonState() {
+      const btn = document.getElementById("btn-solve-free");
+      if (!btn) return;
+      if (isScrambled) {
+        btn.disabled = false;
+        btn.title = "";
+        btn.classList.remove("opacity-50", "cursor-not-allowed");
+      } else {
+        btn.disabled = true;
+        btn.classList.add("opacity-50", "cursor-not-allowed");
+      }
+    }
+
+    function createFaceLabels() {
+      const size = Math.max(0.35, 2.8 / N);
+      const cubeExtent = N * size;
+      const planeSize = cubeExtent * 0.55;
+      const labelConfig = {
+        U: { pos: [0, cubeExtent / 2 + 0.008, 0], rot: [-Math.PI / 2, 0, 0] },
+        D: { pos: [0, -cubeExtent / 2 - 0.008, 0], rot: [Math.PI / 2, 0, 0] },
+        F: { pos: [0, 0, cubeExtent / 2 + 0.008], rot: [0, 0, 0] },
+        B: { pos: [0, 0, -cubeExtent / 2 - 0.008], rot: [0, Math.PI, 0] },
+        R: { pos: [cubeExtent / 2 + 0.008, 0, 0], rot: [0, Math.PI / 2, 0] },
+        L: { pos: [-cubeExtent / 2 - 0.008, 0, 0], rot: [0, -Math.PI / 2, 0] },
+      };
+      Object.entries(labelConfig).forEach(([face, { pos, rot }]) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#000000";
+        ctx.font = "bold 160px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(face, 128, 128 + 18);
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.15, depthWrite: false, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeSize, planeSize), material);
+        mesh.position.set(...pos);
+        mesh.rotation.set(...rot);
+        cubeGroup.add(mesh);
+        faceLabelMeshes.push(mesh);
+      });
+    }
+
+    function initPalette() {
+      const p = document.getElementById("fixed-palette");
+      p.innerHTML = "";
+      Object.values(COLORS).forEach((color) => {
+        let s = document.createElement("div");
+        let textColor = color.toLowerCase() === "#ffffff" ? "text-gray-900" : "text-white";
+        s.className = `color-swatch w-8 h-8 rounded-md cursor-pointer relative flex justify-center items-center text-xs font-bold ${textColor} border border-gray-300 shadow-sm`;
+        s.style.background = color;
+        s.dataset.color = color;
+        if (color === activePaintColor) s.classList.add("active");
+
+        s.onclick = () => {
+          if (s.classList.contains("disabled")) return;
+          activePaintColor = color;
+          document.querySelectorAll(".color-swatch").forEach((el) => el.classList.remove("active"));
+          s.classList.add("active");
+        };
+        p.appendChild(s);
+      });
+    }
+
+    function paintCell(face, r, c, specificColor = null, isDrag = false) {
+      if (mode !== "custom" || isNavigating) return;
+      let key = `${face}-${r}-${c}`;
+      let targetColor = specificColor || activePaintColor;
+
+      if (customState[key] === targetColor) {
+        if (!isDrag && !specificColor) {
+          delete customState[key];
+          let dom2D = document.getElementById(`net-${face}-${r}-${c}`);
+          if (dom2D) {
+            dom2D.style.background = "";
+            dom2D.classList.add("unpainted");
+          }
+          cubies.forEach((cubie) => {
+            const st = cubie.stickers[face];
+            if (st && st.r == r && st.c == c) st.mesh.material.color.set(UNPAINTED);
+          });
+          updateCustomUI();
+        }
+        return;
+      }
+
+      let counts = {};
+      Object.values(customState).forEach((col) => (counts[col] = (counts[col] || 0) + 1));
+      let isTargetColorExhausted = (counts[targetColor] || 0) >= N * N;
+
+      if (!specificColor && isTargetColorExhausted) {
+        if (!isDrag && customState[key]) {
+          delete customState[key];
+          let dom2D = document.getElementById(`net-${face}-${r}-${c}`);
+          if (dom2D) {
+            dom2D.style.background = "";
+            dom2D.classList.add("unpainted");
+          }
+          cubies.forEach((cubie) => {
+            const st = cubie.stickers[face];
+            if (st && st.r == r && st.c == c) st.mesh.material.color.set(UNPAINTED);
+          });
+          updateCustomUI();
+        }
+        return;
+      }
+      customState[key] = targetColor;
+
+      let dom2D = document.getElementById(`net-${face}-${r}-${c}`);
+      if (dom2D) {
+        dom2D.style.background = targetColor;
+        dom2D.classList.remove("unpainted");
+      }
+      cubies.forEach((cubie) => {
+        const st = cubie.stickers[face];
+        if (st && st.r == r && st.c == c) st.mesh.material.color.set(targetColor);
+      });
+      updateCustomUI();
+    }
+
+    function build2DNet() {
+      ["U", "L", "F", "R", "B", "D"].forEach((face) => {
+        const faceEl = document.getElementById(`net-${face}`);
+        faceEl.innerHTML = "";
+        faceEl.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+        faceEl.style.gridTemplateRows = `repeat(${N}, 1fr)`;
+
+        for (let r = 0; r < N; r++) {
+          for (let c = 0; c < N; c++) {
+            let logical_r = N - 1 - r;
+            let logical_c = c;
+            let cell = document.createElement("div");
+            cell.className = "net-cell cursor-pointer transition-all rounded-sm";
+            cell.id = `net-${face}-${logical_r}-${logical_c}`;
+
+            if (mode === "free") {
+              cell.style.background = COLORS[face];
+            } else {
+              // 自定义模式：每个格子显示独立斑马纹
+              cell.classList.add("unpainted");
+            }
+
+            faceEl.appendChild(cell);
+          }
+        }
+      });
+    }
+
+    function updateCustomUI() {
+      if (mode !== "custom") return;
+      let counts = {};
+      Object.values(customState).forEach((col) => (counts[col] = (counts[col] || 0) + 1));
+      let limit = N * N;
+      let isConfigValid = true;
+      let needAutoSwitch = false;
+
+      document.querySelectorAll("#fixed-palette .color-swatch").forEach((sw) => {
+        let col = sw.dataset.color;
+        let used = counts[col] || 0;
+        let remaining = limit - used;
+        if (remaining <= 0) {
+          sw.classList.add("hidden");
+          sw.classList.remove("flex");
+          if (col === activePaintColor) needAutoSwitch = true;
+          if (remaining < 0) isConfigValid = false;
+        } else {
+          sw.classList.remove("hidden");
+          sw.classList.add("flex");
+          sw.innerText = remaining;
+          sw.style.border = "";
+          sw.style.color = col.toLowerCase() === "#ffffff" ? "#111827" : "#ffffff";
+          isConfigValid = false;
+        }
+      });
+
+      if (needAutoSwitch) {
+        let nextAvailableColor = Object.values(COLORS).find((c) => (counts[c] || 0) < limit);
+        if (nextAvailableColor) {
+          activePaintColor = nextAvailableColor;
+          document.querySelectorAll("#fixed-palette .color-swatch").forEach((sw) => {
+            if (sw.dataset.color === activePaintColor) sw.classList.add("active");
+            else sw.classList.remove("active");
+          });
+        }
+      }
+
+      let painted = Object.keys(customState).length;
+      let total = 6 * limit;
+      statusText.innerText = `已填充: ${painted} / ${total}`;
+
+      let btn = document.getElementById("btn-solve-custom");
+      if (painted === total && isConfigValid) {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fas fa-rocket"></i> 生成算法求解`;
+      } else {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-lock"></i> 请确保每种颜色恰好 ${limit} 块`;
+      }
+    }
+
+    function switchMode(m) {
+      if (isAnimating) return;
+      if (m === "free" && mode === "custom") {
+        const hasPainted = Object.values(customState).some((c) => c !== UNPAINTED);
+        if (hasPainted) {
+          return showConfirm("切换到自由模式将清空当前所有填色，确定继续吗？", () => _doSwitchMode("free"));
+        }
+      }
+      _doSwitchMode(m);
+    }
+
+    function _doSwitchMode(m) {
+      mode = m;
+      // 使用 Tailwind class 切换激活态和显示隐藏
+      document.querySelectorAll(".tab").forEach((el) => el.classList.remove("active-tab"));
+      document.getElementById(m === "free" ? "tab-free" : "tab-custom").classList.add("active-tab");
+
+      document.getElementById("free-controls").classList.toggle("hidden", m !== "free");
+      document.getElementById("right-panel").classList.toggle("hidden", m !== "custom");
+      initCube();
+    }
+
+    // ============================================================================
+    // [4] 相机扫描、图片上传与裁剪提取模块
+    // ============================================================================
+    let cameraStream = null;
+    let currentScanFace = null;
+    let cropperInstance = null;
+    let extractedColors = [];
+    let colorScanInterval = null;
+
+    function hexToRgb(hex) {
+      let r = parseInt(hex.slice(1, 3), 16),
+        g = parseInt(hex.slice(3, 5), 16),
+        b = parseInt(hex.slice(5, 7), 16);
+      return { r, g, b };
+    }
+
+    function colorDistance(rgb1, rgb2) {
+      return Math.pow(rgb1.r - rgb2.r, 2) + Math.pow(rgb1.g - rgb2.g, 2) + Math.pow(rgb1.b - rgb2.b, 2);
+    }
+
+    function getClosestCubeColor(r, g, b) {
+      let closest = null,
+        minD = Infinity;
+      const target = { r, g, b };
+      Object.values(COLORS).forEach((hex) => {
+        let d = colorDistance(target, hexToRgb(hex));
+        if (d < minD) {
+          minD = d;
+          closest = hex;
+        }
+      });
+      return closest;
+    }
+
+    async function openCameraModal(face) {
+      currentScanFace = face;
+      const modal = document.getElementById("camera-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+
+      const grid = document.getElementById("camera-grid");
+      grid.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+      grid.style.gridTemplateRows = `repeat(${N}, 1fr)`;
+      grid.innerHTML = "";
+      for (let i = 0; i < N * N; i++) {
+        let cell = document.createElement("div");
+        cell.className = "camera-cell";
+        let dot = document.createElement("div");
+        dot.className = "camera-dot";
+        cell.appendChild(dot);
+        grid.appendChild(cell);
+      }
+
+      retakeColor();
+
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        switchScanTab("camera");
+      } catch (err) {
+        console.warn("相机无法调用，自动切换为图片上传: " + err.message);
+        switchScanTab("upload");
+      }
+    }
+
+    function closeCameraModal() {
+      stopRealTimeColorScan();
+      const modal = document.getElementById("camera-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        cameraStream = null;
+      }
+      if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+      }
+      document.getElementById("upload-input").value = "";
+      const cropperWrapper = document.getElementById("cropper-wrapper");
+      cropperWrapper.classList.add("hidden");
+      cropperWrapper.classList.remove("flex");
+      const uploadLabel = document.querySelector("#area-upload label");
+      uploadLabel.classList.remove("hidden");
+      uploadLabel.classList.add("flex");
+    }
+
+    function startRealTimeColorScan() {
+      if (colorScanInterval) clearInterval(colorScanInterval);
+      colorScanInterval = setInterval(() => {
+        const video = document.getElementById("camera-video");
+        const vw = video.videoWidth,
+          vh = video.videoHeight;
+        if (vw === 0) return;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = vw;
+        canvas.height = vh;
+        const ctx = canvas.getContext("2d");
+        ctx.translate(vw, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, vw, vh);
+
+        const minDim = Math.min(vw, vh);
+        const gridSize = minDim * 0.5;
+        const startX = (vw - gridSize) / 2;
+        const startY = (vh - gridSize) / 2;
+        const cellSize = gridSize / N;
+
+        const cells = document.getElementById("camera-grid").children;
+        for (let r = 0; r < N; r++) {
+          for (let c = 0; c < N; c++) {
+            const px = startX + c * cellSize + cellSize / 2;
+            const py = startY + r * cellSize + cellSize / 2;
+            const pixel = ctx.getImageData(px, py, 1, 1).data;
+            const matchedColor = getClosestCubeColor(pixel[0], pixel[1], pixel[2]);
+
+            const index = r * N + c;
+            if (cells[index]) {
+              const dot = cells[index].querySelector(".camera-dot");
+              if (dot) dot.style.backgroundColor = matchedColor;
+            }
+          }
+        }
+      }, 500);
+    }
+
+    function stopRealTimeColorScan() {
+      if (colorScanInterval) {
+        clearInterval(colorScanInterval);
+        colorScanInterval = null;
+      }
+    }
+
+    async function switchScanTab(tab) {
+      const tabCamera = document.getElementById("tab-camera");
+      const tabUpload = document.getElementById("tab-upload");
+      const areaCamera = document.getElementById("area-camera");
+      const areaUpload = document.getElementById("area-upload");
+
+      if (tab === "camera") {
+        tabCamera.className = "flex-1 py-2.5 text-center font-bold text-orange-500 border-b-[3px] border-orange-500 outline-none";
+        tabUpload.className = "flex-1 py-2.5 text-center font-bold text-gray-400 border-b-[3px] border-transparent outline-none";
+        areaCamera.classList.remove("hidden");
+        areaCamera.classList.add("flex");
+        areaUpload.classList.add("hidden");
+        areaUpload.classList.remove("flex");
+        if (!cameraStream) {
+          try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+          } catch (e) { }
+        }
+        if (cameraStream) document.getElementById("camera-video").srcObject = cameraStream;
+        startRealTimeColorScan();
+      } else {
+        tabUpload.className = "flex-1 py-2.5 text-center font-bold text-orange-500 border-b-[3px] border-orange-500 outline-none";
+        tabCamera.className = "flex-1 py-2.5 text-center font-bold text-gray-400 border-b-[3px] border-transparent outline-none";
+        areaUpload.classList.remove("hidden");
+        areaUpload.classList.add("flex");
+        areaCamera.classList.add("hidden");
+        areaCamera.classList.remove("flex");
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          cameraStream = null;
+          document.getElementById("camera-video").srcObject = null;
+        }
+        stopRealTimeColorScan();
+      }
+    }
+
+    function handleImageUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const uploadLabel = document.querySelector("#area-upload label");
+        uploadLabel.classList.add("hidden");
+        uploadLabel.classList.remove("flex");
+        const cropperWrapper = document.getElementById("cropper-wrapper");
+        cropperWrapper.classList.remove("hidden");
+        cropperWrapper.classList.add("flex");
+        const img = document.getElementById("cropper-image");
+        img.src = event.target.result;
+        if (cropperInstance) cropperInstance.destroy();
+        cropperInstance = new Cropper(img, { aspectRatio: 1, viewMode: 1, autoCropArea: 0.9, background: false, zoomable: true });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function captureCameraColor() {
+      const video = document.getElementById("camera-video");
+      const vw = video.videoWidth,
+        vh = video.videoHeight;
+      if (vw === 0) return;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = vw;
+      canvas.height = vh;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, vw, vh);
+
+      const gridSize = Math.min(vw, vh) * 0.5;
+      processImageToColors(canvas, (vw - gridSize) / 2, (vh - gridSize) / 2, gridSize);
+    }
+
+    function captureCropperColor() {
+      if (!cropperInstance) return;
+      const canvas = cropperInstance.getCroppedCanvas();
+      if (!canvas) return;
+      processImageToColors(canvas, 0, 0, canvas.width);
+    }
+
+    function processImageToColors(canvas, startX, startY, size) {
+      const ctx = canvas.getContext("2d");
+      const cellSize = size / N;
+      extractedColors = [];
+      for (let r = 0; r < N; r++) {
+        let rowColors = [];
+        for (let c = 0; c < N; c++) {
+          const pixel = ctx.getImageData(startX + c * cellSize + cellSize / 2, startY + r * cellSize + cellSize / 2, 1, 1).data;
+          rowColors.push(getClosestCubeColor(pixel[0], pixel[1], pixel[2]));
+        }
+        extractedColors.push(rowColors);
+      }
+      showColorPreview();
+    }
+
+    function showColorPreview() {
+      stopRealTimeColorScan();
+      const scanWorkspace = document.getElementById("scan-workspace");
+      scanWorkspace.classList.add("hidden");
+      scanWorkspace.classList.remove("flex");
+      const scanTabs = document.getElementById("scan-tabs");
+      scanTabs.classList.add("hidden");
+      scanTabs.classList.remove("flex");
+      const areaPreview = document.getElementById("area-preview");
+      areaPreview.classList.remove("hidden");
+      areaPreview.classList.add("flex");
+
+      const grid = document.getElementById("preview-grid");
+      grid.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+      grid.style.gridTemplateRows = `repeat(${N}, 1fr)`;
+      grid.innerHTML = "";
+
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          let cell = document.createElement("div");
+          cell.className = "w-full h-full rounded-md";
+          cell.style.backgroundColor = extractedColors[r][c];
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    function retakeColor() {
+      const scanWorkspace = document.getElementById("scan-workspace");
+      scanWorkspace.classList.remove("hidden");
+      scanWorkspace.classList.add("flex");
+      const scanTabs = document.getElementById("scan-tabs");
+      scanTabs.classList.remove("hidden");
+      scanTabs.classList.add("flex");
+      const areaPreview = document.getElementById("area-preview");
+      areaPreview.classList.add("hidden");
+      areaPreview.classList.remove("flex");
+      document.getElementById("upload-input").value = "";
+      const cropperWrapper = document.getElementById("cropper-wrapper");
+      cropperWrapper.classList.add("hidden");
+      cropperWrapper.classList.remove("flex");
+      const uploadLabel = document.querySelector("#area-upload label");
+      uploadLabel.classList.remove("hidden");
+      uploadLabel.classList.add("flex");
+      extractedColors = [];
+      if (document.getElementById("tab-camera").classList.contains("text-orange-500")) startRealTimeColorScan();
+    }
+
+    function confirmCapturedColors() {
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          paintCell(currentScanFace, N - 1 - r, c, extractedColors[r][c]);
+        }
+      }
+      closeCameraModal();
+    }
+
+    // ============================================================================
+    // [5] 交互式层拖拽 (Three.js Raycaster) 与 旋转动画
+    // ============================================================================
+    const raycaster = new THREE.Raycaster();
+    renderer.domElement.addEventListener("mousedown", (e) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+      const intersects = raycaster.intersectObjects(stickerMeshes);
+
+      if (intersects.length > 0 && !isNavigating) {
+        const hit = intersects[0].object;
+        const ds = hit.userData;
+        if (mode === "custom") {
+          paintCell(ds.face, ds.r, ds.c);
+          return;
+        }
+        const cubie = ds.cubie;
+        dragInfo = { startX: e.clientX, startY: e.clientY, target: hit, face: ds.face, cubie: cubie, nx: cubie.stickers[ds.face].nx, ny: cubie.stickers[ds.face].ny, nz: cubie.stickers[ds.face].nz };
+      } else {
+        isDraggingScene = true;
+        prevMouse = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    document.addEventListener("mouseup", async (e) => {
+      isDraggingScene = false;
+      if (dragInfo && !isAnimating && mode === "free") {
+        let dx = e.clientX - dragInfo.startX;
+        let dy = e.clientY - dragInfo.startY;
+        if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+          const cameraDir = new THREE.Vector3();
+          camera.getWorldDirection(cameraDir);
+          const cameraRight = new THREE.Vector3().crossVectors(cameraDir, camera.up).normalize();
+          const cameraUp = new THREE.Vector3().crossVectors(cameraRight, cameraDir).normalize();
+          const drag3D = new THREE.Vector3().addScaledVector(cameraRight, dx).addScaledVector(cameraUp, -dy);
+          const faceNormal = new THREE.Vector3(dragInfo.nx, dragInfo.ny, dragInfo.nz);
+          const cross = new THREE.Vector3().crossVectors(faceNormal, drag3D);
+
+          let best = Math.max(Math.abs(cross.x), Math.abs(cross.y), Math.abs(cross.z));
+          if (best < 1e-6) {
+            dragInfo = null;
+            return;
+          }
+
+          let axis, index, dir;
+          if (Math.abs(cross.x) === best) {
+            axis = "x";
+            index = dragInfo.cubie.lx;
+            dir = cross.x > 0 ? 1 : -1;
+          } else if (Math.abs(cross.y) === best) {
+            axis = "y";
+            index = dragInfo.cubie.ly;
+            dir = cross.y > 0 ? 1 : -1;
+          } else {
+            axis = "z";
+            index = dragInfo.cubie.lz;
+            dir = cross.z > 0 ? 1 : -1;
+          }
+
+          moveHistory.push({ axis, indices: [index], dir });
+          await rotateLayers(axis, [index], dir, 300);
+          isScrambled = true;
+          updateSolveButtonState();
+        }
+      }
+      dragInfo = null;
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (isDraggingScene) {
+        sceneRotation.y -= (e.clientX - prevMouse.x) * 0.6;
+        sceneRotation.x += (e.clientY - prevMouse.y) * 0.6;
+        sceneRotation.x = Math.max(-85, Math.min(85, sceneRotation.x));
+        applyCubeTransform();
+        prevMouse = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    async function rotateLayers(axis, indices, dir, speed) {
+      clearArrows();
+      isAnimating = true;
+      let layer = cubies.filter((c) => indices.includes(c["l" + axis]));
+
+      const pivot = new THREE.Group();
+      cubeGroup.add(pivot);
+      layer.forEach((c) => pivot.attach(c.mesh));
+
+      const startRot = pivot.rotation[axis];
+      const targetRot = startRot + (dir * Math.PI) / 2;
+      const animDuration = Math.abs(dir) === 2 ? speed * 1.6 : speed;
+
+      if (animDuration > 0) {
+        const startTime = performance.now();
+        await new Promise((resolve) => {
+          function tick() {
+            const t = Math.min((performance.now() - startTime) / animDuration, 1);
+            const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+            pivot.rotation[axis] = startRot + (targetRot - startRot) * ease;
+            if (t < 1) requestAnimationFrame(tick);
+            else resolve();
+          }
+          tick();
+        });
+      } else {
+        pivot.rotation[axis] = targetRot;
+      }
+
+      pivot.updateMatrixWorld();
+      layer.forEach((c) => cubeGroup.attach(c.mesh));
+      cubeGroup.remove(pivot);
+
+      const steps = Math.abs(dir) === 2 ? 2 : 1;
+      const signDir = dir > 0 ? 1 : -1;
+
+      for (let s = 0; s < steps; s++) {
+        layer.forEach((c) => {
+          let offset = (N - 1) / 2;
+          let cx = c.lx - offset,
+            cy = c.ly - offset,
+            cz = c.lz - offset;
+          if (axis === "x") {
+            c.ly = Math.round(-signDir * cz + offset);
+            c.lz = Math.round(signDir * cy + offset);
+          }
+          if (axis === "y") {
+            c.lx = Math.round(signDir * cz + offset);
+            c.lz = Math.round(-signDir * cx + offset);
+          }
+          if (axis === "z") {
+            c.lx = Math.round(-signDir * cy + offset);
+            c.ly = Math.round(signDir * cx + offset);
+          }
+          Object.values(c.stickers).forEach((st) => {
+            let { nx, ny, nz } = st;
+            if (axis === "x") {
+              st.ny = Math.round(-signDir * nz);
+              st.nz = Math.round(signDir * ny);
+            }
+            if (axis === "y") {
+              st.nx = Math.round(signDir * nz);
+              st.nz = Math.round(-signDir * nx);
+            }
+            if (axis === "z") {
+              st.nx = Math.round(-signDir * ny);
+              st.ny = Math.round(signDir * nx);
+            }
+          });
+        });
+      }
+      isAnimating = false;
+    }
+
+    async function scrambleCube() {
+      if (isAnimating) return;
+      moveHistory = [];
+      let steps = N * 5;
+      for (let i = 0; i < steps; i++) {
+        let axis = ["x", "y", "z"][Math.floor(Math.random() * 3)];
+        let index = Math.floor(Math.random() * N);
+        let dir = Math.random() > 0.5 ? 1 : -1;
+        moveHistory.push({ axis, indices: [index], dir });
+        await rotateLayers(axis, [index], dir, getScrambleSpeed());
+      }
+      isScrambled = true;
+      updateSolveButtonState();
+      //console.log(moveHistory.map(m => getMoveName(m)).join(' '));
+    }
+    
+
+    const _Faces = RubiksCubeSolver.Faces;
+    const _Colors = RubiksCubeSolver.Colors;
+    const _NormalToFace = { "0,1,0": _Faces.Top, "0,-1,0": _Faces.Bottom, "0,0,1": _Faces.Front, "0,0,-1": _Faces.Back, "1,0,0": _Faces.Right, "-1,0,0": _Faces.Left };
+    const colorToEnum = { [COLORS.F]: 0, [COLORS.L]: 1, [COLORS.B]: 2, [COLORS.R]: 3, [COLORS.U]: 4, [COLORS.D]: 5 };
+
+    function _convertMove(move, dist, layer, width, n, text = "") {
+      let d = dist % 4;
+      if (d < 0) d += 4;
+      if (d === 0) return [];
+      const indices = [];
+      let axis, dir;
+      for (let i = 0; i < width; i++) {
+        let index;
+        switch (move) {
+          case "U":
+            axis = "y";
+            index = n - layer + i;
+            break;
+          case "D":
+            axis = "y";
+            index = layer - 1 - i;
+            break;
+          case "F":
+            axis = "z";
+            index = n - layer + i;
+            break;
+          case "B":
+            axis = "z";
+            index = layer - 1 - i;
+            break;
+          case "R":
+            axis = "x";
+            index = n - layer + i;
+            break;
+          case "L":
+            axis = "x";
+            index = layer - 1 - i;
+            break;
+        }
+        indices.push(index);
+      }
+      switch (move) {
+        case "U":
+          dir = d === 3 ? 1 : d === 2 ? 2 : -1;
+          break;
+        case "D":
+          dir = d === 3 ? -1 : d === 2 ? 2 : 1;
+          break;
+        case "F":
+          dir = d === 3 ? 1 : d === 2 ? 2 : -1;
+          break;
+        case "B":
+          dir = d === 3 ? -1 : d === 2 ? 2 : 1;
+          break;
+        case "R":
+          dir = d === 3 ? 1 : d === 2 ? 2 : -1;
+          break;
+        case "L":
+          dir = d === 3 ? -1 : d === 2 ? 2 : 1;
+          break;
+      }
+      return [{ axis, indices, dir, text }];
+    }
+
+    function getChineseStepDesc(move, showDegree = true) {
+      if (!move) return "未知动作";
+      let faceName = "",
+        isCW = true;
+
+      if (move.indices.length === N) {
+        if (move.axis === "x") faceName = "整体绕 X 轴";
+        else if (move.axis === "y") faceName = "整体绕 Y 轴";
+        else if (move.axis === "z") faceName = "整体绕 Z 轴";
+        isCW = move.dir < 0;
+      } else if (move.indices.length > 1) {
+        let start = Math.min(...move.indices),
+          end = Math.max(...move.indices);
+        if (move.axis === "y") faceName = `顶层往下 第 ${N - end} 到 ${N - start} 层`;
+        else if (move.axis === "z") faceName = `前往后 第 ${N - end} 到 ${N - start} 层`;
+        else if (move.axis === "x") faceName = `右往左 第 ${N - end} 到 ${N - start} 层`;
+        isCW = move.dir < 0;
+      } else {
+        let idx = move.indices[0];
+        if (move.axis === "y") {
+          if (idx === N - 1) {
+            faceName = "顶层 (U)";
+            isCW = move.dir < 0;
+          } else if (idx === 0) {
+            faceName = "底层 (D)";
+            isCW = move.dir > 0;
+          } else {
+            faceName = `顶层往下 第 ${N - idx} 层`;
+            isCW = move.dir < 0;
+          }
+        } else if (move.axis === "z") {
+          if (idx === N - 1) {
+            faceName = "前面 (F)";
+            isCW = move.dir < 0;
+          } else if (idx === 0) {
+            faceName = "后面 (B)";
+            isCW = move.dir > 0;
+          } else {
+            faceName = `前面往后 第 ${N - idx} 层`;
+            isCW = move.dir < 0;
+          }
+        } else if (move.axis === "x") {
+          if (idx === N - 1) {
+            faceName = "右面 (R)";
+            isCW = move.dir < 0;
+          } else if (idx === 0) {
+            faceName = "左面 (L)";
+            isCW = move.dir > 0;
+          } else {
+            faceName = `右面往左 第 ${N - idx} 层`;
+            isCW = move.dir < 0;
+          }
+        }
+      }
+
+      let action = isCW ? "顺时针" : "逆时针";
+      if (!showDegree) {
+        return `${faceName}`;
+      }
+      let degree = Math.abs(move.dir) === 2 ? "180°" : "90°";
+      return `${faceName} ${action} ${degree}`;
+    }
+
+    function getMoveName(move) {
+      if (move.text) return move.text;
+      let suffix = Math.abs(move.dir) === 2 ? "2" : move.dir === -1 ? "'" : "";
+      if (move.indices.length === N) return move.axis.toUpperCase() + suffix;
+      let idx = move.indices[0];
+      if (move.indices.length === 1) {
+        if (move.axis === "y" && idx === N - 1) return "U" + suffix;
+        if (move.axis === "y" && idx === 0) return "D" + suffix;
+        if (move.axis === "z" && idx === N - 1) return "F" + suffix;
+        if (move.axis === "z" && idx === 0) return "B" + suffix;
+        if (move.axis === "x" && idx === N - 1) return "R" + suffix;
+        if (move.axis === "x" && idx === 0) return "L" + suffix;
+      }
+      return `${move.axis.toUpperCase()}${idx + 1}${suffix}`;
+    }
+
+    // --- 虚拟列表 ---
+    const STEP_ITEM_HEIGHT = 44;
+    function initVirtualStepList(moves) {
+      const container = document.getElementById("step-list");
+      container.innerHTML = "";
+      container.classList.remove("space-y-1");
+      container.style.padding = "8px";
+      const phantom = document.createElement("div");
+      phantom.style.height = moves.length * STEP_ITEM_HEIGHT + "px";
+      phantom.style.position = "relative";
+      const content = document.createElement("div");
+      content.id = "step-content";
+      content.style.position = "absolute";
+      content.style.top = "0";
+      content.style.left = "0";
+      content.style.right = "0";
+      phantom.appendChild(content);
+      container.appendChild(phantom);
+      window._stepMoves = moves;
+      window._stepTotal = moves.length;
+      container.onscroll = renderVirtualSteps;
+      renderVirtualSteps();
+    }
+
+    function renderVirtualSteps() {
+      if (isLeftPanelCollapsed) return;
+      const container = document.getElementById("step-list"),
+        content = document.getElementById("step-content");
+      const moves = window._stepMoves,
+        total = window._stepTotal;
+      if (!moves || !content) return;
+      const buffer = 6,
+        scrollTop = container.scrollTop,
+        viewportHeight = container.clientHeight;
+      let startIndex = Math.max(0, Math.floor(scrollTop / STEP_ITEM_HEIGHT) - buffer);
+      let endIndex = Math.min(total - 1, startIndex + Math.ceil(viewportHeight / STEP_ITEM_HEIGHT) + buffer * 2);
+
+      content.style.transform = "translateY(" + startIndex * STEP_ITEM_HEIGHT + "px)";
+      if (content.dataset.startIndex == startIndex && content.dataset.endIndex == endIndex && content.dataset.activeStep == navState.step) return;
+
+      content.dataset.startIndex = startIndex;
+      content.dataset.endIndex = endIndex;
+      content.dataset.activeStep = navState.step;
+      content.innerHTML = "";
+      for (let i = startIndex; i <= endIndex; i++) {
+        const item = document.createElement("div");
+        item.className = "step-item " + (i === navState.step ? "step-active" : "step-inactive");
+        item.innerHTML = `<span class="step-num">${i + 1}.</span><span class="step-desc">${getChineseStepDesc(moves[i])}</span><span class="step-badge">${getMoveName(moves[i])}</span>`;
+        item.onclick = function () {
+          if (!navState.playing) jumpToStep(i);
+        };
+        content.appendChild(item);
+      }
+    }
+
+    function scrollToStep(index) {
+      const container = document.getElementById("step-list");
+      if (!container) return;
+      const targetY = index * STEP_ITEM_HEIGHT - container.clientHeight / 2 + STEP_ITEM_HEIGHT / 2;
+      container.scrollTop = Math.max(0, Math.min(targetY, (window._stepTotal || 0) * STEP_ITEM_HEIGHT - container.clientHeight));
+    }
+
+    // ============================================================================
+    // [7] 求解调度与导入导出
+    // ============================================================================
+
+    function buildSolverCube() {
+      const sc = new RubiksCubeSolver.Cube(N);
+      cubies.forEach((cubie) => {
+        Object.values(cubie.stickers).forEach((st) => {
+          const faceEnum = _NormalToFace[`${st.nx},${st.ny},${st.nz}`];
+          if (faceEnum === undefined) return;
+          const colorHex = customState[`${st.face}-${st.r}-${st.c}`];
+          if (!colorHex || colorHex === UNPAINTED) return;
+          const colorEnum = colorToEnum[colorHex];
+          if (colorEnum === undefined) return;
+          let mx = cubie.lx,
+            my;
+          switch (faceEnum) {
+            case _Faces.Front:
+              my = N - 1 - cubie.ly;
+              break;
+            case _Faces.Back:
+              mx = N - 1 - cubie.lx;
+              my = N - 1 - cubie.ly;
+              break;
+            case _Faces.Right:
+              mx = N - 1 - cubie.lz;
+              my = N - 1 - cubie.ly;
+              break;
+            case _Faces.Left:
+              mx = cubie.lz;
+              my = N - 1 - cubie.ly;
+              break;
+            case _Faces.Top:
+              my = cubie.lz;
+              break;
+            case _Faces.Bottom:
+              my = N - 1 - cubie.lz;
+              break;
+          }
+          sc.matrix[faceEnum][my][mx] = colorEnum;
+        });
+      });
+      return sc;
+    }
+
+    // 拼色合法性校验模块 (防止高阶魔方因颜色冲突导致死循环卡死浏览器)
+    function validateCubeState() {
+      if (mode !== "custom") return { valid: true };
+
+      const getFaceOfColor = (colorHex) => {
+        return Object.keys(COLORS).find((k) => COLORS[k].toLowerCase() === colorHex.toLowerCase());
+      };
+
+      const oppositeFaces = { U: "D", D: "U", F: "B", B: "F", L: "R", R: "L" };
+      const standardCorners = [
+        ["U", "F", "L"],
+        ["U", "F", "R"],
+        ["U", "B", "L"],
+        ["U", "B", "R"],
+        ["D", "F", "L"],
+        ["D", "F", "R"],
+        ["D", "B", "L"],
+        ["D", "B", "R"],
+      ].map((arr) => arr.sort().join(""));
+
+      let currentCorners = [];
+
+      for (let i = 0; i < cubies.length; i++) {
+        let c = cubies[i];
+        let visibleStickers = Object.values(c.stickers);
+        if (visibleStickers.length === 0) continue;
+
+        let blockColors = visibleStickers.map((st) => {
+          let col = customState[`${st.face}-${st.r}-${st.c}`];
+          if (!col || col === UNPAINTED) col = COLORS[st.face];
+          return getFaceOfColor(col) || "?";
+        });
+
+        if (blockColors.includes("?")) return { valid: false, message: "存在未填色区域，请确保完全涂色。" };
+
+        // 校验 1：同一块上不能有相同颜色，也不能有对立面的颜色
+        for (let j = 0; j < blockColors.length; j++) {
+          for (let k = j + 1; k < blockColors.length; k++) {
+            if (blockColors[j] === blockColors[k]) {
+              return { valid: false, message: `状态非法：同一物理块上包含重复颜色（${blockColors[j]}）` };
+            }
+            if (oppositeFaces[blockColors[j]] === blockColors[k]) {
+              return { valid: false, message: `状态非法：同一物理块上包含对立面颜色（${blockColors[j]} 与 ${blockColors[k]}）` };
+            }
+          }
+        }
+
+        // 收集角块
+        if (visibleStickers.length === 3) {
+          currentCorners.push(blockColors.sort().join(""));
+        }
+      }
+
+      // 校验 2：角块组合必须合法（恰好匹配8个标准角块）
+      let sortedCurrentCorners = currentCorners.slice().sort();
+      let sortedStandardCorners = standardCorners.slice().sort();
+
+      for (let i = 0; i < 8; i++) {
+        if (sortedCurrentCorners[i] !== sortedStandardCorners[i]) {
+          return { valid: false, message: "状态非法：8个角块颜色组合错误，存在死角或不存在的角块。" };
+        }
+      }
+
+      // 校验 3：奇数阶魔方的中心块相对位置必须与固定坐标系一致
+      if (N % 2 !== 0 && N >= 3) {
+        let centerIdx = (N - 1) / 2;
+        let centerColors = {};
+
+        for (let i = 0; i < cubies.length; i++) {
+          let visibleStickers = Object.values(cubies[i].stickers);
+          if (visibleStickers.length === 1) {
+            let st = visibleStickers[0];
+            if (st.r === centerIdx && st.c === centerIdx) {
+              let col = customState[`${st.face}-${st.r}-${st.c}`];
+              centerColors[st.face] = getFaceOfColor(col);
+            }
+          }
+        }
+
+        let uniqueCenters = new Set(Object.values(centerColors));
+        if (uniqueCenters.size !== 6) return { valid: false, message: "状态非法：6个中心块颜色必须互不相同。" };
+
+        if (oppositeFaces[centerColors["U"]] !== centerColors["D"] || oppositeFaces[centerColors["F"]] !== centerColors["B"] || oppositeFaces[centerColors["L"]] !== centerColors["R"]) {
+          return { valid: false, message: "状态非法：中心块相对面错误（例如顶面和底面的颜色不互为对立面）。" };
+        }
+      }
+
+      return { valid: true };
+    }
+
+    function buildKociembaStateString(sc) {
+      let stateStr = "";
+      const faceOrder = [_Faces.Top, _Faces.Right, _Faces.Front, _Faces.Bottom, _Faces.Left, _Faces.Back];
+      if (N === 3) {
+        const centerU = sc.matrix[_Faces.Top][1][1],
+          centerR = sc.matrix[_Faces.Right][1][1];
+        const centerF = sc.matrix[_Faces.Front][1][1],
+          centerD = sc.matrix[_Faces.Bottom][1][1];
+        const centerL = sc.matrix[_Faces.Left][1][1],
+          centerB = sc.matrix[_Faces.Back][1][1];
+
+        if (new Set([centerU, centerR, centerF, centerD, centerL, centerB]).size !== 6) {
+          throw new Error("中心块颜色存在重复，无法使用算法");
+        }
+        const colorToChar = { [centerU]: "U", [centerR]: "R", [centerF]: "F", [centerD]: "D", [centerL]: "L", [centerB]: "B" };
+        for (const face of faceOrder) {
+          for (let y = 0; y < 3; y++) {
+            for (let x = 0; x < 3; x++) {
+              const colEnum = sc.matrix[face][y][x];
+              if (colorToChar[colEnum] === undefined) throw new Error("存在异常色块");
+              stateStr += colorToChar[colEnum];
+            }
+          }
+        }
+      } else if (N === 2) {
+        const colorToChar = { [colorToEnum[COLORS.U]]: "U", [colorToEnum[COLORS.R]]: "R", [colorToEnum[COLORS.F]]: "F", [colorToEnum[COLORS.D]]: "D", [colorToEnum[COLORS.L]]: "L", [colorToEnum[COLORS.B]]: "B" };
+        const defaultCenterColors = { [_Faces.Top]: "U", [_Faces.Right]: "R", [_Faces.Front]: "F", [_Faces.Bottom]: "D", [_Faces.Left]: "L", [_Faces.Back]: "B" };
+        for (const face of faceOrder) {
+          let c = defaultCenterColors[face],
+            m = sc.matrix[face];
+          if (colorToChar[m[0][0]] === undefined || colorToChar[m[0][1]] === undefined || colorToChar[m[1][0]] === undefined || colorToChar[m[1][1]] === undefined) {
+            throw new Error("存在异常色块");
+          }
+          stateStr += colorToChar[m[0][0]] + c + colorToChar[m[0][1]] + c + c + c + colorToChar[m[1][0]] + c + colorToChar[m[1][1]];
+        }
+      }
+      return stateStr;
+    }
+
+    async function initSolve(sourceMode) {
+      if (sourceMode === "custom") {
+        const checkResult = validateCubeState();
+        if (!checkResult.valid) {
+          return showNotify(checkResult.message, "error");
+        }
+      }
+      const loadingOverlay = document.getElementById("loading-overlay");
+      loadingOverlay.classList.remove("hidden");
+      loadingOverlay.classList.add("flex");
+      isSolvingCanceled = false;
+      await new Promise((r) => setTimeout(r, 60));
+
+      let movesQueue = null;
+      let successAlgorithm = false;
+
+      try {
+        const sc = buildSolverCube();
+        let recordedMoves = [];
+
+        if (sc.isSolved()) {
+          loadingOverlay.classList.add("hidden");
+          loadingOverlay.classList.remove("flex");
+          return showNotify("太棒了！魔方当前已经是还原状态。", "success");
+        }
+        const searchDepth = N <= 6 ? 4 : N <= 8 ? 3 : N <= 20 ? 2 : 1;
+        let shortSolution = null;
+        if (typeof RubiksCubeSolver.findShortSolution === "function") {
+          shortSolution = RubiksCubeSolver.findShortSolution(sc, searchDepth);
+        }
+        if (shortSolution) {
+          shortSolution.forEach((t) => {
+            const text = sc.turnToText(t.m, t.d, t.l, t.w);
+            recordedMoves.push(..._convertMove(t.m, t.d, t.l, t.w, N, text));
+          });
+          movesQueue = recordedMoves;
+          successAlgorithm = true;
+          solveType = "short";
+        } else {
+          if (N === 2 || N === 3) {
+            let stateStr = buildKociembaStateString(sc);
+            let solutionStr = null;
+            const toggleEl = document.getElementById("fast-mode-toggle");
+            const isFastMode = toggleEl ? toggleEl.checked : true;
+            const timeoutEl = document.getElementById("solver-timeout-input");
+            const timeoutSec = timeoutEl ? (parseInt(timeoutEl.value) || 180) : 180;
+
+            if (!isFastMode) {
+              document.getElementById("loading-text").innerText = "准备 IDA* 搜索器...";
+              const workerRes = await solveWithIDAStar(stateStr, timeoutSec * 1000);
+              if (isSolvingCanceled || workerRes === 'error: canceled') return;
+              if (workerRes && !workerRes.startsWith("error")) {
+                solutionStr = workerRes;
+                solveType = "ida"
+              } else {
+                console.warn("IDA* 求解失败或超时:", workerRes);
+                showNotify(`IDA* 搜索未找到最优解或超时，回退极速算法兜底`, "warning");
+                await new Promise(r => setTimeout(r, 800));
+              }
+            }
+            if (!solutionStr) {
+              if (typeof window.Cube.initSolver === "function") {
+                document.getElementById("loading-text").innerText = "初始化快速求解器...";
+                await new Promise((r) => setTimeout(r, 20));
+                window.Cube.initSolver();
+                window.Cube.initSolver = null;
+              }
+              document.getElementById("loading-text").innerText = "正在快速求解...";
+              await new Promise((r) => setTimeout(r, 20));
+              solutionStr = window.Cube.fromString(stateStr).solve();
+              solveType = "kociemba";
+            }
+
+            if (solutionStr) {
+              if (solutionStr.toLowerCase().includes("error")) {
+                throw new Error("魔方状态不合法（可能存在棱块错位或翻角），求解失败！");
+              }
+              solutionStr.trim().split(/\s+/).forEach((part) => {
+                if (part) recordedMoves.push(..._convertMove(part[0], part[1] === "'" ? -1 : part[1] === "2" ? 2 : 1, 1, 1, N, part));
+              });
+              movesQueue = recordedMoves;
+              successAlgorithm = true;
+            } else {
+              throw new Error("无法找到求解路径");
+            }
+          } else {
+            RubiksCubeSolver.solve(sc, (text, move, dist, layer, width) => {
+              recordedMoves.push(..._convertMove(move, dist, layer, width, N, text));
+            });
+            movesQueue = recordedMoves;
+            successAlgorithm = true;
+            solveType = "nxn";
+          }
+        }
+      } catch (e) {
+        console.warn("Solve Error:", e);
+        if (sourceMode === "custom") {
+          showNotify(e.message || "求解失败，可能是无法还原的死锁排列，请核对颜色。", "error");
+        }
+      }
+
+      if (!successAlgorithm) {
+        if (sourceMode === "free" && moveHistory.length > 0) {
+          movesQueue = [...moveHistory].reverse().map((m) => ({ axis: m.axis, indices: m.indices, dir: -m.dir }));
+          solveType = "history";
+          successAlgorithm = true;
+        } else {
+          loadingOverlay.classList.add("hidden");
+          loadingOverlay.classList.remove("flex");
+          return;
+        }
+      }
+
+      loadingOverlay.classList.add("hidden");
+      loadingOverlay.classList.remove("flex");
+      solveQueue = movesQueue;
+
+      if (solveQueue.length === 0) return showNotify("太棒了！魔方当前已经是还原状态。", "success");
+
+      document.getElementById("free-controls").classList.add("hidden");
+      document.getElementById("right-panel").classList.add("hidden");
+      navigatorUI.classList.remove("hidden");
+      navigatorUI.classList.add("flex");
+      toggleLeftPanel(false);
+
+      initVirtualStepList(solveQueue);
+      isNavigating = true;
+      navState.step = 0;
+      navState.playing = false;
+      updateNavUI();
+      updateArrowIndicators();
+    }
+
+    async function jumpToStep(targetStep) {
+      if (isAnimating || targetStep === navState.step) return;
+      if (navState.playing) {
+        navState.playing = false;
+        clearTimeout(navState.timer);
+        document.querySelector("#btn-play i").className = "fas fa-play";
+      }
+      isAnimating = true;
+      let diff = targetStep - navState.step;
+      const fastSpeed = Math.abs(diff) > 1 ? 0 : 0.1;
+      const originalStep = navState.step;
+      navState.step = targetStep;
+      updateNavUI();
+      if (diff > 0) {
+        for (let i = originalStep; i < targetStep; i++) await rotateLayers(solveQueue[i].axis, solveQueue[i].indices, solveQueue[i].dir, fastSpeed);
+      } else {
+        for (let i = originalStep - 1; i >= targetStep; i--) await rotateLayers(solveQueue[i].axis, solveQueue[i].indices, -solveQueue[i].dir, fastSpeed);
+      }
+      isAnimating = false;
+      updateArrowIndicators();
+    }
+
+    async function playStep(dirDelta) {
+      if (isAnimating) return;
+      let maxSteps = solveQueue.length;
+      let nextStep = navState.step + dirDelta;
+      if (nextStep < 0 || nextStep > maxSteps) return;
+
+      isAnimating = true;
+      const animSpeed = navState.playing ? getAnimSpeed() : Math.max(1, Math.round(SPEED_LEVELS[2][0] * getNSpeedFactor()));
+
+      if (dirDelta === 1) {
+        let move = solveQueue[navState.step];
+        navState.step++;
+        updateNavUI();
+        await rotateLayers(move.axis, move.indices, move.dir, animSpeed);
+      } else {
+        navState.step--;
+        let move = solveQueue[navState.step];
+        updateNavUI();
+        await rotateLayers(move.axis, move.indices, -move.dir, animSpeed);
+      }
+
+      isAnimating = false;
+      if (navState.playing) {
+        if (navState.step < maxSteps) {
+          navState.timer = setTimeout(() => playStep(1), getStepDelay());
+        } else {
+          togglePlay();
+          const moveEl = document.getElementById("nav-move-text");
+          if (moveEl) moveEl.innerHTML = `<i class="fas fa-check-circle" style="color:#f97316;"></i> 还原完毕`;
+        }
+      }
+      updateArrowIndicators();
+    }
+
+
+    function togglePlay() {
+      if (navState.playing) {
+        navState.playing = false;
+        clearTimeout(navState.timer);
+        updateNavUI();
+        updateArrowIndicators();
+        return;
+      }
+      if (isAnimating) return;
+
+      if (navState.step >= solveQueue.length) {
+        jumpToStep(0).then(() => {
+          navState.playing = true;
+          updateNavUI();
+          playStep(1);
+        });
+        return;
+      }
+
+      navState.playing = true;
+      updateNavUI();
+      playStep(1);
+    }
+
+    function clearArrows() {
+      arrowMeshes.forEach((mesh) => {
+        if (mesh.parent) mesh.parent.remove(mesh);
+        mesh.geometry.dispose();
+      });
+      arrowMeshes = [];
+    }
+
+    function updateMoveHintCard() {
+      const card = document.getElementById("move-hint-card");
+      if (navState.playing || !isNavigating || navState.step >= solveQueue.length) {
+        card.classList.remove("visible");
+        return;
+      }
+      const move = solveQueue[navState.step];
+      const makeCol = (icon) => `<div class="hint-col"><i class="iconfont ${icon} hint-icon"></i><div class="hint-deg">90°</div></div>`;
+      let isCW = true;
+      if (move.indices.length === N) {
+        isCW = move.dir < 0;
+      } else {
+        isCW = move.indices.length === 1 && move.indices[0] === 0 ? move.dir > 0 : move.dir < 0;
+      }
+      let colsHTML,
+        labelText = "下一步";
+      if (Math.abs(move.dir) === 2) {
+        colsHTML = makeCol(isCW ? "icon-rr" : "icon-ll") + "" + makeCol(isCW ? "icon-rr" : "icon-ll");
+      } else {
+        colsHTML = makeCol(isCW ? "icon-rr" : "icon-ll");
+      }
+
+      let stepText = getChineseStepDesc(move, false);
+      card.innerHTML = `
+        <div class="hint-cols">${colsHTML}</div>
+        <div class="hint-step-text text-sm font-bold text-gray-800 mt-1 " >${stepText}</div>
+        <div class="hint-label">${labelText}</div>
+      `;
+      card.classList.add("visible");
+    }
+
+    function updateArrowIndicators() {
+      clearArrows();
+      if (navState.playing || isAnimating || !isNavigating || navState.step >= solveQueue.length) return;
+
+      const move = solveQueue[navState.step];
+      const layerCubies = cubies.filter((c) => move.indices.includes(c["l" + move.axis]));
+      const axisVector = new THREE.Vector3();
+      axisVector[move.axis] = 1;
+      const size = Math.max(0.35, 2.8 / N);
+      const arrowGeo = new THREE.PlaneGeometry(size * 0.88, size * 0.88);
+
+      layerCubies.forEach((cubie) => {
+        Object.values(cubie.stickers).forEach((st) => {
+          const normal = new THREE.Vector3(st.nx, st.ny, st.nz);
+          if (Math.abs(axisVector.dot(normal)) < 0.1) {
+            const moveDir = new THREE.Vector3().crossVectors(axisVector, normal).multiplyScalar(move.dir > 0 ? 1 : -1);
+            const invQuat = st.mesh.getWorldQuaternion(new THREE.Quaternion()).invert();
+            const localMoveDir = moveDir.clone().applyQuaternion(invQuat);
+            const angle = Math.atan2(localMoveDir.y, localMoveDir.x);
+
+            const arrowMesh = new THREE.Mesh(arrowGeo, matArrowSingle);
+            arrowMesh.position.z = 0.005;
+            arrowMesh.rotation.z = angle - Math.PI / 2;
+            arrowMesh.userData = { baseSize: size, angle: angle };
+            st.mesh.add(arrowMesh);
+            arrowMeshes.push(arrowMesh);
+          }
+        });
+      });
+      updateMoveHintCard();
+    }
+
+    // ---- nav-text 防抖：播放时避免高频 DOM 更新 ----
+    let _navTextDebounceTimer = null;
+    let _navTextPendingStep = null;
+    let _navTextPendingMax = null;
+
+    function _flushNavText() {
+      _navTextDebounceTimer = null;
+      const step = _navTextPendingStep;
+      const maxSteps = _navTextPendingMax;
+      if (step === null || maxSteps === null) return;
+      _navTextPendingStep = null;
+      _navTextPendingMax = null;
+
+      const algoNameMap = {
+        "short": "捷径碰撞",
+        "ida": "IDA* 最优算法",
+        "kociemba": "Kociemba算法",
+        "nxn": "NxN 层先算法",
+        "history": "历史回退",
+        "algorithmic": (N <= 3 ? "Kociemba算法" : "NxN算法")
+      };
+      const algoName = algoNameMap[solveType] || "未知算法";
+
+      let stepInfo = "";
+      if (step < maxSteps) {
+        let mName = getMoveName(solveQueue[step]);
+        stepInfo = mName ? ` → ${mName}` : " → 层转动";
+      }
+
+      const stepInput = document.getElementById("nav-step-input");
+      if (stepInput) {
+        stepInput.value = step;
+        stepInput.max = maxSteps;
+        stepInput.disabled = navState.playing;
+        const w = String(step).length;
+        stepInput.style.width = (w < 2 ? 2 : w) + 'em';
+      }
+      const totalEl = document.getElementById("nav-total-text");
+      if (totalEl) totalEl.textContent = `/ ${maxSteps} (${algoName})`;
+      const moveEl = document.getElementById("nav-move-text");
+      if (moveEl) moveEl.textContent = stepInfo;
+      const prefixEl = document.getElementById("nav-algo-prefix");
+      if (prefixEl) prefixEl.textContent = "还原进度:";
+
+      renderVirtualSteps();
+      if (step < maxSteps) scrollToStep(step);
+    }
+
+    function _scheduleNavText(step, maxSteps) {
+      _navTextPendingStep = step;
+      _navTextPendingMax = maxSteps;
+      if (!navState.playing) {
+        if (_navTextDebounceTimer) { clearTimeout(_navTextDebounceTimer); _navTextDebounceTimer = null; }
+        _flushNavText();
+        return;
+      }
+      if (_navTextDebounceTimer) return;
+      _navTextDebounceTimer = setTimeout(_flushNavText, 200);
+    }
+
+    function updateNavUI() {
+      const maxSteps = solveQueue.length;
+      document.getElementById("btn-prev").disabled = navState.step === 0 || navState.playing;
+      document.getElementById("btn-next").disabled = navState.step === maxSteps || navState.playing;
+      document.getElementById("btn-play").innerHTML = navState.playing
+        ? '<i class="fas fa-pause"></i>'
+        : '<i class="fas fa-play"></i>';
+      _scheduleNavText(navState.step, maxSteps);
+      // 旋转提示卡不依赖 nav-text，保持即时
+      updateMoveHintCard();
+    }
+
+    function onNavStepInputChange(input) {
+      if (isAnimating || navState.playing) {
+        input.value = navState.step;
+        return;
+      }
+      let target = parseInt(input.value);
+      const maxSteps = solveQueue.length;
+      if (isNaN(target)) { input.value = navState.step; return; }
+      target = Math.max(0, Math.min(maxSteps, target));
+      input.value = target;
+      const tw = String(target).length;
+      input.style.width = (tw < 2 ? 2 : tw) + 'em';
+      if (target !== navState.step) jumpToStep(target);
+    }
+
+    function onKeyDown(e) {
+      // 1. 全局守卫：如果是输入框或正在动画中，直接返回
+      if (
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "SELECT" ||
+        !isNavigating ||
+        isAnimating
+      ) {
+        return;
+      }
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          playStep(-1);
+          break;
+
+        case "ArrowRight":
+          e.preventDefault();
+          playStep(1);
+          break;
+
+        case " ":
+          togglePlay();
+          break;
+
+        case "s":
+        case "S":
+          initSolve(mode);
+          break;
+
+        case "p":
+        case "P":
+          togglePlay();
+          break;
+
+        case "Home":
+          jumpToStep(0);
+          break;
+
+        case "End":
+          jumpToStep(solveQueue.length);
+          break;
+
+        case "+":
+        case "=": {
+          const speedSlider = document.getElementById("speed-slider");
+          speedSlider.value = Math.min(11, parseInt(speedSlider.value) + 1);
+          onSpeedChange(speedSlider.value);
+          break;
+        }
+
+        case "-": {
+          const speedSlider = document.getElementById("speed-slider");
+          speedSlider.value = Math.max(1, parseInt(speedSlider.value) - 1);
+          onSpeedChange(speedSlider.value);
+          break;
+        }
+
+        default:
+          break;
+      }
+    }
+
+    function closeNavigator() {
+      isNavigating = false;
+      navState.playing = false;
+      clearTimeout(navState.timer);
+      // 清除 nav-text 防抖定时器，避免关闭后仍触发 DOM 更新
+      if (_navTextDebounceTimer) { clearTimeout(_navTextDebounceTimer); _navTextDebounceTimer = null; }
+      _navTextPendingStep = null;
+      _navTextPendingMax = null;
+      navigatorUI.classList.add("hidden");
+      navigatorUI.classList.remove("flex");
+      const leftPanel = document.getElementById("left-panel");
+      leftPanel.classList.add("hidden");
+      leftPanel.classList.remove("flex");
+      leftPanel.style.marginLeft = "0px";
+      document.getElementById("btn-expand-left").style.left = "-50px";
+      isLeftPanelCollapsed = false;
+      document.getElementById("step-list").innerHTML = "";
+
+      document.getElementById("free-controls").classList.toggle("hidden", mode !== "free");
+      document.getElementById("right-panel").classList.toggle("hidden", mode !== "custom");
+
+      if (solveType === "history") moveHistory = [];
+      clearArrows();
+      const card = document.getElementById("move-hint-card");
+      if (card) card.classList.remove("visible");
+    }
+
+    // ============================================================================
+    // [8] 状态导入与导出功能 (.rsteps)
+    // ============================================================================
+    async function exportState() {
+      const state = { N, mode, customState, moveHistory, solveQueue, solveType, navStateStep: navState.step, playSpeedLevel, sceneRotation, isScrambled };
+      const blob = new Blob([JSON.stringify(state)], { type: "application/json" });
+      const filename = `求解状态_${N}x${N}.rsteps`;
+      const success = await saveFileWithPicker(blob, filename, "魔方状态文件", ".rsteps", "application/json");
+    }
+
+    function importState(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const state = JSON.parse(event.target.result);
+          await applyImportedState(state);
+        } catch (err) {
+          Toast.error("解析失败，文件可能已损坏");
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    }
+
+    async function applyImportedState(state) {
+      if (isAnimating) return;
+      closeNavigator();
+
+      document.getElementById("dim-input").value = state.N || 3;
+      onDimCustomChange();
+      _doSwitchMode(state.mode || "free");
+
+      sceneRotation = state.sceneRotation || { x: 30, y: -45 };
+      applyCubeTransform();
+      document.getElementById("speed-slider").value = (state.playSpeedLevel || 2) + 1;
+      onSpeedChange(document.getElementById("speed-slider").value);
+
+      if (state.mode === "custom" && state.customState) {
+        customState = state.customState;
+        Object.keys(customState).forEach((key) => {
+          const [face, r, c] = key.split("-");
+          paintCell(face, parseInt(r), parseInt(c), customState[key]);
+        });
+      } else if (state.mode === "free" && state.moveHistory) {
+        moveHistory = state.moveHistory;
+        for (let m of moveHistory) {
+          await rotateLayers(m.axis, m.indices, m.dir, 0); // 瞬间恢复模型
+        }
+        isScrambled = state.isScrambled || moveHistory.length > 0;
+        updateSolveButtonState();
+      }
+
+      if (state.solveQueue && state.solveQueue.length > 0) {
+        solveQueue = state.solveQueue;
+        solveType = state.solveType || "algorithmic";
+
+        document.getElementById("free-controls").classList.add("hidden");
+        document.getElementById("right-panel").classList.add("hidden");
+        navigatorUI.classList.remove("hidden");
+        navigatorUI.classList.add("flex");
+        const leftPanelImport = document.getElementById("left-panel");
+        leftPanelImport.classList.remove("hidden");
+        leftPanelImport.classList.add("flex");
+
+        initVirtualStepList(solveQueue);
+        isNavigating = true;
+        navState.step = 0;
+
+        if (state.navStateStep > 0) await jumpToStep(state.navStateStep);
+        else {
+          updateNavUI();
+          updateArrowIndicators();
+        }
+      }
+    }
+
+    // ============================================================================
+    // [9] UI 初始化与事件挂载
+    // ============================================================================
+    (function () {
+      const rightResizer = document.getElementById("panel-resizer");
+      const rightPanel = document.getElementById("right-panel");
+      let rightStartX,
+        rightStartWidth,
+        rightResizeTimer = null;
+
+      function onRightMove(e) {
+        let delta = rightStartX - e.clientX;
+        rightPanel.style.width = Math.min(Math.max(rightStartWidth + delta, 280), window.innerWidth * 0.8) + "px";
+        if (!rightResizeTimer)
+          rightResizeTimer = requestAnimationFrame(() => {
+            onWindowResize();
+            rightResizeTimer = null;
+          });
+      }
+      function onRightUp() {
+        rightResizer.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onRightMove);
+        document.removeEventListener("mouseup", onRightUp);
+        if (rightResizeTimer) {
+          cancelAnimationFrame(rightResizeTimer);
+          rightResizeTimer = null;
+        }
+        onWindowResize();
+      }
+      rightResizer.addEventListener("mousedown", (e) => {
+        rightStartX = e.clientX;
+        rightStartWidth = rightPanel.offsetWidth;
+        rightResizer.classList.add("dragging");
+        document.body.style.cursor = "ew-resize";
+        document.body.style.userSelect = "none";
+        document.addEventListener("mousemove", onRightMove);
+        document.addEventListener("mouseup", onRightUp);
+        e.preventDefault();
+      });
+
+      const leftResizer = document.getElementById("left-panel-resizer");
+      const leftPanel = document.getElementById("left-panel");
+      let leftStartX,
+        leftStartWidth,
+        leftResizeTimer = null;
+
+      function onLeftMove(e) {
+        let delta = e.clientX - leftStartX;
+        leftPanel.style.width = Math.min(Math.max(leftStartWidth + delta, 220), 550) + "px";
+        if (!leftResizeTimer)
+          leftResizeTimer = requestAnimationFrame(() => {
+            onWindowResize();
+            leftResizeTimer = null;
+          });
+      }
+      function onLeftUp() {
+        leftResizer.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onLeftMove);
+        document.removeEventListener("mouseup", onLeftUp);
+        if (leftResizeTimer) {
+          cancelAnimationFrame(leftResizeTimer);
+          leftResizeTimer = null;
+        }
+        onWindowResize();
+      }
+      if (leftResizer) {
+        leftResizer.addEventListener("mousedown", (e) => {
+          leftStartX = e.clientX;
+          leftStartWidth = leftPanel.offsetWidth;
+          leftResizer.classList.add("dragging");
+          document.body.style.cursor = "ew-resize";
+          document.body.style.userSelect = "none";
+          document.addEventListener("mousemove", onLeftMove);
+          document.addEventListener("mouseup", onLeftUp);
+          e.preventDefault();
+        });
+      }
+
+      document.addEventListener("keydown", onKeyDown);
+    })();
+
+    function openAboutModal() {
+      const modal = document.getElementById("about-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      switchAboutTab("about");
+    }
+    function closeAboutModal() {
+      const modal = document.getElementById("about-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+    function switchAboutTab(tab) {
+      const isAbout = tab === "about";
+      document.getElementById("about-tab-about").classList.toggle("hidden", !isAbout);
+      document.getElementById("about-tab-help").classList.toggle("hidden", isAbout);
+      document.getElementById("about-tab-btn-about").className = "about-tab " + (isAbout ? "about-tab-active" : "about-tab-inactive");
+      document.getElementById("about-tab-btn-help").className = "about-tab " + (isAbout ? "about-tab-inactive" : "about-tab-active");
+    }
+    document.getElementById("about-modal").addEventListener("click", function (e) {
+      if (e.target === this) closeAboutModal();
+    });
+
+    function toggleLeftPanel(collapse) {
+      isLeftPanelCollapsed = collapse;
+      const panel = document.getElementById("left-panel");
+      const expandBtn = document.getElementById("btn-expand-left");
+
+      panel.classList.remove("hidden");
+      panel.classList.add("flex");
+
+      if (collapse) {
+        panel.style.marginLeft = `-${panel.offsetWidth}px`;
+        expandBtn.style.left = "0px";
+      } else {
+        panel.style.marginLeft = "0px";
+        expandBtn.style.left = "-50px";
+
+        renderVirtualSteps();
+        if (navState.step < solveQueue.length) scrollToStep(navState.step);
+      }
+    }
+
+    // ============================================================
+    // [10] PDF 步骤图导出模块 — Worker 优化版
+    // ============================================================
+
+    /* ── 配置常量 ── */
+    const PDF_CFG = {
+      BATCH: 30,
+      THROTTLE_MS: 1000,
+      JPEG_Q: 0.82,
+      N_THRESHOLD: 10,
+      IMG_HI: 400,
+      IMG_LO: 300,
+    };
+
+    /* ── 进度遮罩 ── */
+    function showPDFProgress(show, current, total, msg) {
+      let el = document.getElementById("pdf-progress-overlay");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "pdf-progress-overlay";
+        el.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);" + "z-index:9999;display:none;align-items:center;justify-content:center;";
+        el.innerHTML =
+          '<div style="background:#fff;border-radius:16px;padding:32px 40px;text-align:center;' +
+          'min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,0.25)">' +
+          '<i class="fas fa-file-pdf" style="font-size:2.5rem;color:#f97316;margin-bottom:12px;display:block"></i>' +
+          '<div id="pdf-pg-text" style="font-size:1rem;font-weight:700;color:#1f2937;margin-bottom:10px"></div>' +
+          '<div style="width:100%;background:#e5e7eb;border-radius:99px;height:10px;overflow:hidden;margin-bottom:6px">' +
+          '<div id="pdf-pg-bar" style="height:100%;background:#f97316;border-radius:99px;transition:width .2s;width:0%"></div></div>' +
+          '<div id="pdf-pg-detail" style="font-size:0.8rem;color:#6b7280"></div></div>';
+        document.body.appendChild(el);
+      }
+      el.style.display = show ? "flex" : "none";
+      if (show) {
+        document.getElementById("pdf-pg-bar").style.width = (total > 0 ? Math.round((current / total) * 100) : 0) + "%";
+        document.getElementById("pdf-pg-text").textContent = msg || "处理中...";
+        document.getElementById("pdf-pg-detail").textContent = current + " / " + total;
+      }
+    }
+
+    function applyMoveToOffCubies(arr, move) {
+      const signDir = move.dir > 0 ? 1 : -1;
+      const steps = Math.abs(move.dir) === 2 ? 2 : 1;
+      const off = (N - 1) / 2;
+      const axisVec = new THREE.Vector3();
+      axisVec[move.axis] = 1;
+      const rotQ = new THREE.Quaternion().setFromAxisAngle(axisVec, (signDir * Math.PI) / 2);
+
+      for (let s = 0; s < steps; s++) {
+        arr.forEach((c) => {
+          if (!move.indices.includes(c["l" + move.axis])) return;
+          let cx = c.lx - off,
+            cy = c.ly - off,
+            cz = c.lz - off;
+          if (move.axis === "x") {
+            c.ly = Math.round(-signDir * cz + off);
+            c.lz = Math.round(signDir * cy + off);
+          }
+          if (move.axis === "y") {
+            c.lx = Math.round(signDir * cz + off);
+            c.lz = Math.round(-signDir * cx + off);
+          }
+          if (move.axis === "z") {
+            c.lx = Math.round(-signDir * cy + off);
+            c.ly = Math.round(signDir * cx + off);
+          }
+          Object.values(c.stickers).forEach((st) => {
+            let { nx, ny, nz } = st;
+            if (move.axis === "x") {
+              st.ny = Math.round(-signDir * nz);
+              st.nz = Math.round(signDir * ny);
+            }
+            if (move.axis === "y") {
+              st.nx = Math.round(signDir * nz);
+              st.nz = Math.round(-signDir * nx);
+            }
+            if (move.axis === "z") {
+              st.nx = Math.round(-signDir * ny);
+              st.ny = Math.round(signDir * nx);
+            }
+          });
+          c.quaternion.premultiply(rotQ);
+        });
+      }
+    }
+
+    function handleNetPaintEvent(e) {
+      if (e.buttons !== 1) return;
+      const cell = e.target.closest(".net-cell");
+      if (cell) {
+        e.preventDefault();
+        const parts = cell.id.split("-");
+        const isDrag = e.type === "mouseover"; // 识别是否为滑动涂色
+        paintCell(parts[1], parseInt(parts[2]), parseInt(parts[3]), null, isDrag);
+      }
+    }
+    async function saveFileWithPicker(blob, defaultName, description, acceptExtension, acceptMime) {
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: defaultName,
+            types: [{ description: description, accept: { [acceptMime]: [acceptExtension] } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return true;
+        } catch (err) {
+          if (err.name !== "AbortError") console.error(err);
+          return false;
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = defaultName;
+        a.click();
+        URL.revokeObjectURL(url);
+        return true;
+      }
+    }
+
+    function captureInitialViews(env, N) {
+      const { offCanvas, offRenderer, offScene, offCamera } = env;
+      const views = [];
+
+      const size = Math.max(0.35, 2.8 / N);
+      const cubeExtent = N * size * 1.05;
+      const dist = getBaseDist() * 0.98;
+
+      const orthoCamera = new THREE.OrthographicCamera(-cubeExtent / 2, cubeExtent / 2, cubeExtent / 2, -cubeExtent / 2, 0.1, 2000);
+
+      const tempLight = new THREE.DirectionalLight(0xffffff, 1.8);
+      offScene.add(tempLight);
+
+      const snap = (camera) => {
+        offRenderer.render(offScene, camera);
+        return offCanvas.toDataURL("image/jpeg", 0.92);
+      };
+
+      offCamera.position.set(-dist * 0.55, dist * 0.55, dist * 0.55);
+      offCamera.up.set(0, 1, 0);
+      offCamera.lookAt(0, 0, 0);
+      tempLight.position.copy(offCamera.position);
+      views.push(snap(offCamera));
+
+      offCamera.position.set(dist * 0.55, -dist * 0.55, -dist * 0.55);
+      offCamera.up.set(0, 1, 0);
+      offCamera.lookAt(0, 0, 0);
+      tempLight.position.copy(offCamera.position);
+      views.push(snap(offCamera));
+
+      const faceConfigs = [
+        { pos: [0, dist, 0], up: [0, 0, -1] }, // U
+        { pos: [0, -dist, 0], up: [0, 0, 1] }, // D
+        { pos: [0, 0, dist], up: [0, 1, 0] }, // F
+        { pos: [0, 0, -dist], up: [0, 1, 0] }, // B
+        { pos: [-dist, 0, 0], up: [0, 1, 0] }, // L
+        { pos: [dist, 0, 0], up: [0, 1, 0] }, // R
+      ];
+
+      faceConfigs.forEach((cfg) => {
+        orthoCamera.position.set(...cfg.pos);
+        orthoCamera.up.set(...cfg.up);
+        orthoCamera.lookAt(0, 0, 0);
+        tempLight.position.copy(orthoCamera.position);
+        views.push(snap(orthoCamera));
+      });
+
+      offScene.remove(tempLight);
+
+      offCamera.position.set(-dist * 0.55, dist * 0.55, dist * 0.55);
+      offCamera.up.set(0, 1, 0);
+      offCamera.lookAt(0, 0, 0);
+
+      return views;
+    }
+
+    // ============================================================
+    // PDF 导出辅助函数 (抽象层)
+    // ============================================================
+
+    // 1. 初始化离屏渲染环境
+    function initOffscreenEnv(N) {
+      const IMG = N > PDF_CFG.N_THRESHOLD ? PDF_CFG.IMG_LO : PDF_CFG.IMG_HI;
+      const offCanvas = document.createElement("canvas");
+      offCanvas.width = IMG;
+      offCanvas.height = IMG;
+
+      const offRenderer = new THREE.WebGLRenderer({
+        canvas: offCanvas,
+        antialias: true,
+        preserveDrawingBuffer: true,
+        alpha: false,
+      });
+      offRenderer.setPixelRatio(1);
+      offRenderer.setSize(IMG, IMG);
+      offRenderer.setClearColor(0xffffff, 1);
+
+      const offScene = new THREE.Scene();
+      offScene.background = new THREE.Color(0xffffff);
+      offScene.add(new THREE.AmbientLight(0xffffff, 2.5));
+
+      const d1 = new THREE.DirectionalLight(0xffffff, 1.5);
+      d1.position.set(-10, 10, 10);
+      offScene.add(d1);
+
+      const d2 = new THREE.DirectionalLight(0xffffff, 0.8);
+      d2.position.set(10, -5, -10);
+      offScene.add(d2);
+
+      const offCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+
+      const zoomFactor = 0.85;
+      const camDist = getBaseDist() * zoomFactor;
+
+      offCamera.position.set(-camDist * 0.55, camDist * 0.55, camDist * 0.55);
+      offCamera.up.set(0, 1, 0);
+      offCamera.lookAt(0, 0, 0);
+
+      const offGroup = new THREE.Group();
+      offScene.add(offGroup);
+
+      return { offCanvas, offRenderer, offScene, offCamera, offGroup, disposables: [] };
+    }
+
+    // 2. 构建离屏魔方模型
+    function buildOffscreenCubeModel(env, globalCubies, globalCustomState, N) {
+      const cs = Math.max(0.35, 2.8 / N);
+      const go = (N - 1) / 2;
+      const boxGeo = new THREE.BoxGeometry(cs * 0.92, cs * 0.92, cs * 0.92);
+      const blkMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+      const stGeo = new THREE.PlaneGeometry(cs * 0.85, cs * 0.85);
+
+      env.disposables.push(boxGeo, blkMat, stGeo);
+
+      const fp = {
+        U: { p: [0, cs / 2 + 0.003, 0], r: [-Math.PI / 2, 0, 0] },
+        D: { p: [0, -cs / 2 - 0.003, 0], r: [Math.PI / 2, 0, 0] },
+        F: { p: [0, 0, cs / 2 + 0.003], r: [0, 0, 0] },
+        B: { p: [0, 0, -cs / 2 - 0.003], r: [0, Math.PI, 0] },
+        L: { p: [-cs / 2 - 0.003, 0, 0], r: [0, -Math.PI / 2, 0] },
+        R: { p: [cs / 2 + 0.003, 0, 0], r: [0, Math.PI / 2, 0] },
+      };
+
+      const offCubies = globalCubies.map((c) => {
+        const st = {};
+        Object.entries(c.stickers).forEach(([face, s]) => {
+          st[face] = { face, r: s.r, c: s.c, nx: s.nx, ny: s.ny, nz: s.nz, color: globalCustomState[face + "-" + s.r + "-" + s.c] || COLORS[face] };
+        });
+        return { lx: c.lx, ly: c.ly, lz: c.lz, quaternion: c.mesh.quaternion.clone(), stickers: st, group: null };
+      });
+
+      offCubies.forEach((cu) => {
+        const g = new THREE.Group();
+        g.position.set((cu.lx - go) * cs, (cu.ly - go) * cs, (cu.lz - go) * cs);
+        g.quaternion.copy(cu.quaternion);
+        g.add(new THREE.Mesh(boxGeo, blkMat));
+
+        Object.entries(cu.stickers).forEach(([face, st]) => {
+          const mat = new THREE.MeshLambertMaterial({ color: st.color });
+          env.disposables.push(mat);
+          const m = new THREE.Mesh(stGeo, mat);
+          m.position.set(...fp[face].p);
+          m.rotation.set(...fp[face].r);
+          g.add(m);
+          st.mesh = m; // 记录 mesh 引用，用于挂载箭头
+        });
+        cu.group = g;
+        env.offGroup.add(g);
+      });
+
+      return offCubies;
+    }
+
+    // 3. 提取所有的截图帧
+    async function captureAllStepsImages(env, offCubies, stepsSnapshot, N) {
+      const images = [];
+      const { offCanvas, offRenderer, offScene, offCamera, disposables } = env;
+      const totalSteps = stepsSnapshot.length;
+      const cs = Math.max(0.35, 2.8 / N);
+      const go = (N - 1) / 2;
+
+      let offArrowMeshes = [];
+      const arrowGeo = new THREE.PlaneGeometry(cs * 0.88, cs * 0.88);
+      disposables.push(arrowGeo);
+
+      // 内部辅助方法
+      const updateTransforms = () => {
+        offCubies.forEach((c) => {
+          c.group.position.set((c.lx - go) * cs, (c.ly - go) * cs, (c.lz - go) * cs);
+          c.group.quaternion.copy(c.quaternion);
+          c.group.updateMatrixWorld(true);
+        });
+      };
+
+      const addArrows = (move) => {
+        if (!move) return;
+        const axisVector = new THREE.Vector3();
+        axisVector[move.axis] = 1;
+        const mat = matArrowSingle;
+
+        offCubies.forEach((cu) => {
+          if (!move.indices.includes(cu["l" + move.axis])) return;
+          Object.values(cu.stickers).forEach((st) => {
+            const normal = new THREE.Vector3(st.nx, st.ny, st.nz);
+            if (Math.abs(axisVector.dot(normal)) < 0.1) {
+              const moveDir = new THREE.Vector3().crossVectors(axisVector, normal).multiplyScalar(move.dir > 0 ? 1 : -1);
+              const invQuat = st.mesh.getWorldQuaternion(new THREE.Quaternion()).invert();
+              const localMoveDir = moveDir.clone().applyQuaternion(invQuat);
+              const angle = Math.atan2(localMoveDir.y, localMoveDir.x);
+
+              const arrowMesh = new THREE.Mesh(arrowGeo, mat);
+              arrowMesh.position.z = 0.005;
+              arrowMesh.rotation.z = angle - Math.PI / 2;
+              st.mesh.add(arrowMesh);
+              offArrowMeshes.push(arrowMesh);
+            }
+          });
+        });
+      };
+
+      const removeArrows = () => {
+        offArrowMeshes.forEach((mesh) => mesh.parent && mesh.parent.remove(mesh));
+        offArrowMeshes = [];
+      };
+
+      // 渲染第一帧 (初始状态)
+      updateTransforms();
+      if (totalSteps > 0) addArrows(stepsSnapshot[0]);
+      offRenderer.render(offScene, offCamera);
+      images.push(offCanvas.toDataURL("image/jpeg", PDF_CFG.JPEG_Q));
+      removeArrows();
+
+      let lastUI = performance.now();
+
+      // 渲染后续步骤
+      for (let i = 0; i < totalSteps; i++) {
+        applyMoveToOffCubies(offCubies, stepsSnapshot[i]);
+        updateTransforms();
+
+        if (i + 1 < totalSteps) addArrows(stepsSnapshot[i + 1]);
+
+        offRenderer.render(offScene, offCamera);
+        images.push(offCanvas.toDataURL("image/jpeg", PDF_CFG.JPEG_Q));
+        removeArrows();
+
+        // 控制进度渲染频率
+        if ((i + 1) % PDF_CFG.BATCH === 0) {
+          await new Promise((r) => requestAnimationFrame(r));
+          const now = performance.now();
+          if (now - lastUI > PDF_CFG.THROTTLE_MS) {
+            lastUI = now;
+            showPDFProgress(true, i + 2, totalSteps + 2, "正在渲染步骤截图...");
+          }
+        }
+      }
+
+      return images;
+    }
+
+    // ================= 1. 主线程备用生成逻辑 =================
+    function buildPDFOnMainThread(images, moveNames, stepDescs, totalSteps, NN, initialViews, fontName) {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: "mm", format: "a4" });
+
+      const PW = 210,
+        PH = 297,
+        MX = 12,
+        MT = 18,
+        MB = 12;
+      const cW = PW - MX * 2,
+        COLS = 5,
+        ROWS = 6,
+        SPP = 30;
+      const HH = 0,
+        FH = 6,
+        gridH = PH - MT - MB - HH - FH;
+      const cellW = cW / COLS,
+        cellH = gridH / ROWS;
+      const imgSz = Math.min(cellW - 4, cellH - 16);
+      const stepPages = Math.ceil(images.length / SPP);
+      const totalPages = stepPages + 1;
+
+      const drawHeader = (title) => {
+        pdf.setFontSize(14);
+        pdf.setFont(fontName, "normal"); // 使用传进来的中文字体名称
+        pdf.setTextColor(249, 115, 22);
+        pdf.text(title, MX, MT);
+        pdf.setFontSize(9);
+        pdf.setTextColor(140, 140, 140);
+        pdf.text(`总步数: ${totalSteps}   |   阶数: ${NN}x${NN}`, PW - MX, MT, { align: "right" });
+        pdf.setDrawColor(249, 115, 22);
+        pdf.setLineWidth(0.4);
+        pdf.line(MX, MT + 2, PW - MX, MT + 2);
+      };
+
+      // --- 封面页 ---
+      drawHeader("魔方求解步骤导出 - 初始状态");
+
+      let bigW = 85,
+        bigH = 85;
+      let startY = MT + 15;
+      let bigGap = 10;
+
+      pdf.addImage(initialViews[0], "JPEG", PW / 2 - bigW - bigGap / 2, startY, bigW, bigH);
+      pdf.setFontSize(11);
+      pdf.setTextColor(30, 30, 30);
+      pdf.text("左-前-上 视图", PW / 2 - bigW / 2 - bigGap / 2, startY + bigH + 6, { align: "center" });
+
+      pdf.addImage(initialViews[1], "JPEG", PW / 2 + bigGap / 2, startY, bigW, bigH);
+      pdf.text("右-后-下 视图", PW / 2 + bigGap / 2 + bigW / 2, startY + bigH + 6, { align: "center" });
+
+      let smallW = 45,
+        smallH = 45;
+      let gridStartY = startY + bigH + 20;
+      let spacingX = 12,
+        spacingY = 14;
+      let startX = (PW - (3 * smallW + 2 * spacingX)) / 2;
+
+      const faceLabels = ["U (顶面)", "D (底面)", "F (前面)", "B (后面)", "L (左面)", "R (右面)"];
+      for (let i = 0; i < 6; i++) {
+        let row = Math.floor(i / 3),
+          col = i % 3;
+        let x = startX + col * (smallW + spacingX),
+          y = gridStartY + row * (smallH + spacingY);
+        pdf.addImage(initialViews[i + 2], "JPEG", x, y, smallW, smallH);
+        pdf.setFontSize(10);
+        pdf.text(faceLabels[i], x + smallW / 2, y + smallH + 5, { align: "center" });
+      }
+
+      pdf.setFontSize(8);
+      pdf.setTextColor(180, 180, 180);
+      const now = new Date();
+      const timeStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      pdf.text(`生成时间: ${timeStr}`, MX, PH - 6);
+      pdf.text(`第 1 / ${totalPages} 页`, PW / 2, PH - 6, { align: "center" });
+
+      // --- 步骤页 ---
+      for (let p = 0; p < stepPages; p++) {
+        pdf.addPage();
+        drawHeader("魔方求解步骤导出 - 还原过程");
+
+        const s0 = p * SPP,
+          s1 = Math.min(s0 + SPP, images.length);
+        for (let idx = s0; idx < s1; idx++) {
+          const li = idx - s0,
+            col = li % COLS,
+            row = Math.floor(li / COLS);
+          const cx = MX + col * cellW,
+            cy = MT + HH + row * cellH;
+          const ix = cx + (cellW - imgSz) / 2,
+            iy = cy + 3;
+          pdf.addImage(images[idx], "JPEG", ix, iy, imgSz, imgSz);
+          const ly = iy + imgSz + 4;
+
+          pdf.setFontSize(8);
+          pdf.setTextColor(30, 30, 30);
+          if (idx === 0) {
+            pdf.text("初始状态", cx + cellW / 2, ly, { align: "center" });
+          } else {
+            pdf.text(`第 ${idx} 步`, cx + cellW / 2, ly, { align: "center" });
+            pdf.setFontSize(8);
+            pdf.setTextColor(249, 115, 22);
+            pdf.text(moveNames[idx - 1] || "", cx + cellW / 2, ly + 4, { align: "center" });
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text(stepDescs[idx - 1] || "", cx + cellW / 2, ly + 8, { align: "center" });
+          }
+        }
+        pdf.setFontSize(8);
+        pdf.setTextColor(180, 180, 180);
+        pdf.text(`第 ${p + 2} / ${totalPages} 页`, PW / 2, PH - 6, { align: "center" });
+      }
+      return pdf.output("blob");
+    }
+
+    // ================= 2. Worker 调度器 =================
+    function generatePDFWithWorkerAsync(images, moveNames, stepDescs, totalSteps, N, initialViews, fontName, fontUrl) {
+      return new Promise((resolve, reject) => {
+        let worker;
+        try {
+          worker = new Worker("./pdf-worker.js");
+          const timer = setTimeout(() => {
+            worker.terminate();
+            reject(new Error("Worker 超时 (30s)"));
+          }, 30000);
+
+          worker.onmessage = (e) => {
+            const m = e.data;
+            if (m.type === "ready") {
+              // 将 fontName 传给 Worker 内部绘图使用
+              worker.postMessage({
+                type: "build",
+                images,
+                moveNames,
+                stepDescs,
+                totalSteps,
+                N,
+                initialViews,
+                fontName,
+              });
+            } else if (m.type === "done") {
+              clearTimeout(timer);
+              worker.terminate();
+              resolve(new Blob([m.buffer], { type: "application/pdf" }));
+            } else if (m.type === "error") {
+              clearTimeout(timer);
+              worker.terminate();
+              reject(new Error(m.detail));
+            }
+          };
+          worker.onerror = (e) => {
+            worker.terminate();
+            reject(new Error("Worker 异常: " + e.message));
+          };
+
+          // 初始化 Worker，传递加载 jspdf 和字体文件的 URL
+          worker.postMessage({
+            type: "init",
+            jspdfUrl: "./jspdf.umd.min.js",
+            fontUrl: fontUrl,
+          });
+        } catch (err) {
+          console.warn("Worker 方式失败，回退主线程:", err);
+          if (worker) worker.terminate();
+          // 回退到主线程渲染，同样传入 fontName
+          resolve(buildPDFOnMainThread(images, moveNames, stepDescs, totalSteps, N, initialViews, fontName));
+        }
+      });
+    }
+
+
+    async function exportStepsPDF() {
+      const totalSteps = solveQueue.length;
+      if (totalSteps === 0) return showNotify("没有求解步骤可导出", "warning");
+
+      const filename = `魔方_${N}x${N}.pdf`;
+      let fileHandle = null;
+      if (window.showSaveFilePicker) {
+        try {
+          fileHandle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description: "PDF 文档", accept: { "application/pdf": [".pdf"] } }],
+          });
+        } catch (err) {
+          if (err.name === "AbortError") return;
+          console.warn("唤起原生保存弹窗失败，将稍后尝试自动下载", err);
+        }
+      }
+      const fontName = "AlibabaPuHuiTi";
+      const fontUrl = "./AlibabaPuHuiTi-normal.js";
+      const stepsSnapshot = solveQueue.slice();
+      const moveNames = stepsSnapshot.map((m) => getMoveName(m));
+      const stepDescs = stepsSnapshot.map((m) => getChineseStepDesc(m,true));      
+      showPDFProgress(true, 0, totalSteps + 2, "正在准备渲染环境...");
+      await new Promise((r) => setTimeout(r, 50));
+
+      let env = null;
+      try {
+        env = initOffscreenEnv(N);
+        const offCubies = buildOffscreenCubeModel(env, cubies, customState, N);
+        for (let i = navState.step - 1; i >= 0; i--) {
+          const m = solveQueue[i];
+          applyMoveToOffCubies(offCubies, { axis: m.axis, indices: m.indices, dir: -m.dir });
+        }
+        const off_cs = Math.max(0.35, 2.8 / N);
+        const off_go = (N - 1) / 2;
+        offCubies.forEach((c) => {
+          c.group.position.set((c.lx - off_go) * off_cs, (c.ly - off_go) * off_cs, (c.lz - off_go) * off_cs);
+          c.group.quaternion.copy(c.quaternion);
+          c.group.updateMatrixWorld(true);
+        });
+        showPDFProgress(true, 1, totalSteps + 2, "正在捕获初始状态...");
+        await new Promise((r) => requestAnimationFrame(r));
+        const initialViews = captureInitialViews(env, N);
+
+        const images = await captureAllStepsImages(env, offCubies, stepsSnapshot, N);
+
+        showPDFProgress(true, totalSteps + 1, totalSteps + 2, "正在生成PDF...");
+        await new Promise((r) => requestAnimationFrame(r));
+        const pdfBlob = await generatePDFWithWorkerAsync(images, moveNames, stepDescs, totalSteps, N, initialViews, fontName, fontUrl);
+        if (fileHandle) {
+          const writable = await fileHandle.createWritable();
+          await writable.write(pdfBlob);
+          await writable.close();
+        } else {
+          const url = URL.createObjectURL(pdfBlob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+
+        showPDFProgress(false);
+        showNotify("PDF 导出成功！共 " + totalSteps + " 步", "success");
+      } catch (err) {
+        console.error("PDF export error:", err);
+        showPDFProgress(false);
+        showNotify("导出失败: " + err.message, "error");
+      } finally {
+        if (env) {
+          env.disposables.forEach((d) => {
+            try {
+              d.dispose();
+            } catch (_) { }
+          });
+          if (env.offRenderer) {
+            env.offRenderer.dispose();
+            env.offRenderer.forceContextLoss?.();
+          }
+        }
+      }
+    }
+
+    document.getElementById("net-container").addEventListener("mousedown", handleNetPaintEvent);
+    document.getElementById("net-container").addEventListener("mouseover", handleNetPaintEvent);
+
+    // ============================================================================
+    // [GIZMO] 立方体方向指示器
+    // ============================================================================
+    (function initGizmo() {
+      const SIZE = 180; // 离屏渲染分辨率（高DPR清晰度）
+      const container = document.getElementById("cube-gizmo");
+      const tooltip = document.getElementById("gizmo-tooltip");
+
+      // --- 离屏 Three.js 渲染器 ---
+      const gRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      gRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      gRenderer.setSize(SIZE, SIZE);
+      gRenderer.setClearColor(0x000000, 0);
+      container.appendChild(gRenderer.domElement);
+
+      const gScene = new THREE.Scene();
+      const gCamera = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
+      gCamera.position.set(0, 0, 10);
+      gCamera.lookAt(0, 0, 0);
+
+      // 光源
+      gScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const gDir = new THREE.DirectionalLight(0xffffff, 0.8);
+      gDir.position.set(5, 8, 6);
+      gScene.add(gDir);
+
+      // 面的定义：法线方向、颜色、标签、对应正交视图角度 {x, y}
+      const FACES = [
+        { label: "U", color: "#e8e8e8", normal: [0, 1, 0], view: { x: 90, y: 0 } },
+        { label: "D", color: "#f0e000", normal: [0, -1, 0], view: { x: -90, y: 0 } },
+        { label: "F", color: "#00b840", normal: [0, 0, 1], view: { x: 0, y: 0 } },
+        { label: "B", color: "#0050ee", normal: [0, 0, -1], view: { x: 0, y: 180 } },
+        { label: "R", color: "#ee1010", normal: [1, 0, 0], view: { x: 0, y: 90 } },
+        { label: "L", color: "#ff7700", normal: [-1, 0, 0], view: { x: 0, y: -90 } },
+      ];
+
+      // 构建 Gizmo 立方体（每面独立 Mesh，便于点击检测）
+      const faceMeshes = [];
+      const gGroup = new THREE.Group();
+      gScene.add(gGroup);
+
+      // 微小间隙让每个面略突出，避免 z-fighting
+      const EXTRUDE = 0.502;
+      const faceOffsets = [
+        [0, EXTRUDE, 0, -Math.PI / 2, 0, 0], // U
+        [0, -EXTRUDE, 0, Math.PI / 2, 0, 0], // D
+        [0, 0, EXTRUDE, 0, 0, 0], // F
+        [0, 0, -EXTRUDE, 0, Math.PI, 0], // B
+        [EXTRUDE, 0, 0, 0, Math.PI / 2, 0], // R
+        [-EXTRUDE, 0, 0, 0, -Math.PI / 2, 0], // L
+      ];
+
+      // Canvas 纹理：纯色背景 + 字母
+      function makeLabel(color, text) {
+        const c = document.createElement("canvas");
+        c.width = c.height = 128;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 128, 128);
+        // 圆角遮罩
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.beginPath();
+        ctx.roundRect(4, 4, 120, 120, 14);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        // 描边
+        ctx.strokeStyle = "rgba(0,0,0,0.25)";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(4, 4, 120, 120);
+        // 字母
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.font = "bold 56px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, 64, 66);
+        const tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      // 高亮纹理（鼠标悬停）
+      function makeHoverLabel(color, text) {
+        const c = document.createElement("canvas");
+        c.width = c.height = 128;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 128, 128);
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.beginPath();
+        ctx.roundRect(4, 4, 120, 120, 14);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        // 高亮叠加
+        ctx.fillStyle = "rgba(255,255,255,0.42)";
+        ctx.beginPath();
+        ctx.roundRect(4, 4, 120, 120, 14);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(249,115,22,0.9)";
+        ctx.lineWidth = 6;
+        ctx.strokeRect(4, 4, 120, 120);
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.font = "bold 56px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, 64, 66);
+        const tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      const planeGeo = new THREE.PlaneGeometry(1, 1);
+
+      FACES.forEach((fd, i) => {
+        const [px, py, pz, rx, ry, rz] = faceOffsets[i];
+        const normalTex = makeLabel(fd.color, fd.label);
+        const hoverTex = makeHoverLabel(fd.color, fd.label);
+        const mat = new THREE.MeshBasicMaterial({ map: normalTex, transparent: true });
+        const mesh = new THREE.Mesh(planeGeo, mat);
+        mesh.position.set(px, py, pz);
+        mesh.rotation.set(rx, ry, rz);
+        mesh.userData = { faceIndex: i, normalTex, hoverTex, fd };
+        gGroup.add(mesh);
+        faceMeshes.push(mesh);
+      });
+
+      const boxMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+      gGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.98, 0.98), boxMat));
+      const _invQ = new THREE.Quaternion();
+      function syncGizmo() {
+        camera.updateMatrixWorld();
+        _invQ.copy(camera.quaternion).invert();
+        gGroup.quaternion.copy(_invQ);
+      }
+
+      function gizmoLoop() {
+        requestAnimationFrame(gizmoLoop);
+        syncGizmo();
+        gRenderer.render(gScene, gCamera);
+      }
+      gizmoLoop();
+
+      const gRaycaster = new THREE.Raycaster();
+      let hoveredMesh = null;
+
+      function getGizmoNDC(e) {
+        const rect = gRenderer.domElement.getBoundingClientRect();
+        return new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      }
+
+      function flyToView(targetX, targetY, duration = 400) {
+        const startX = sceneRotation.x;
+        const startY = sceneRotation.y;
+        let dY = ((((targetY - startY) % 360) + 540) % 360) - 180;
+        const endY = startY + dY;
+        const startTime = performance.now();
+        function tick() {
+          const t = Math.min((performance.now() - startTime) / duration, 1);
+          const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          sceneRotation.x = startX + (targetX - startX) * ease;
+          sceneRotation.y = startY + dY * ease;
+          applyCubeTransform();
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        tick();
+      }
+      document.addEventListener("keydown", (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+        const keyMap = {
+          'u': { x: 90, y: 0 },
+          'd': { x: -90, y: 0 },
+          'f': { x: 0, y: 0 },
+          'b': { x: 0, y: 180 },
+          'r': { x: 0, y: 90 },
+          '8': { x: 90, y: 0 },
+          '2': { x: -90, y: 0 },
+          '5': { x: 0, y: 0 },
+          '0': { x: 0, y: 180 },
+          '4': { x: 0, y: -90 },
+          '6': { x: 0, y: 90 },
+          '1': { x: 30, y: -45 },
+          '3': { x: -30, y: 135 },
+        };
+
+        const targetView = keyMap[e.key.toLowerCase()];
+
+        if (targetView) {
+          e.preventDefault();
+          flyToView(targetView.x, targetView.y);
+        }
+      });
+
+      container.addEventListener("mousemove", (e) => {
+        gRaycaster.setFromCamera(getGizmoNDC(e), gCamera);
+        const hits = gRaycaster.intersectObjects(faceMeshes);
+        const hit = hits.length > 0 ? hits[0].object : null;
+
+        if (hit !== hoveredMesh) {
+          if (hoveredMesh) {
+            hoveredMesh.material.map = hoveredMesh.userData.normalTex;
+            hoveredMesh.material.needsUpdate = true;
+          }
+          hoveredMesh = hit;
+          if (hoveredMesh) {
+            hoveredMesh.material.map = hoveredMesh.userData.hoverTex;
+            hoveredMesh.material.needsUpdate = true;
+            const labels = { U: "顶视图 (U)", D: "底视图 (D)", F: "前视图 (F)", B: "后视图 (B)", R: "右视图 (R)", L: "左视图 (L)" };
+            tooltip.textContent = labels[hoveredMesh.userData.fd.label];
+            tooltip.style.opacity = "1";
+            container.style.cursor = "pointer";
+          } else {
+            tooltip.style.opacity = "0";
+            container.style.cursor = "default";
+          }
+        }
+      });
+
+      container.addEventListener("mouseleave", () => {
+        if (hoveredMesh) {
+          hoveredMesh.material.map = hoveredMesh.userData.normalTex;
+          hoveredMesh.material.needsUpdate = true;
+          hoveredMesh = null;
+        }
+        tooltip.style.opacity = "0";
+        container.style.cursor = "default";
+      });
+
+      container.addEventListener("click", (e) => {
+        gRaycaster.setFromCamera(getGizmoNDC(e), gCamera);
+        const hits = gRaycaster.intersectObjects(faceMeshes);
+        if (hits.length > 0) {
+          const fd = hits[0].object.userData.fd;
+          flyToView(fd.view.x, fd.view.y);
+        }
+      });
+
+      container.addEventListener("mousedown", (e) => e.stopPropagation());
+    })();
+
+    initCube();
+  </script>
+</body>
+
+</html>
