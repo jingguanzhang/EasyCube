@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>EasyCube魔方求解器</title>
   <link rel="stylesheet" href="./all.min.css" />
   <link rel="stylesheet" href="./cropper.min.css" />
@@ -24,523 +24,223 @@
   </script>
   <style>
     /* ===== 魔方展开图网格布局 ===== */
-    .pos-U {
-      grid-column: 2;
-      grid-row: 1;
-    }
-
-    .pos-L {
-      grid-column: 1;
-      grid-row: 2;
-    }
-
-    .pos-F {
-      grid-column: 2;
-      grid-row: 2;
-    }
-
-    .pos-R {
-      grid-column: 3;
-      grid-row: 2;
-    }
-
-    .pos-B {
-      grid-column: 4;
-      grid-row: 2;
-    }
-
-    .pos-D {
-      grid-column: 2;
-      grid-row: 3;
-    }
+    .pos-U { grid-column: 2; grid-row: 1; }
+    .pos-L { grid-column: 1; grid-row: 2; }
+    .pos-F { grid-column: 2; grid-row: 2; }
+    .pos-R { grid-column: 3; grid-row: 2; }
+    .pos-B { grid-column: 4; grid-row: 2; }
+    .pos-D { grid-column: 2; grid-row: 3; }
 
     /* 展开图面标签 */
-    .net-face {
-      position: relative;
-    }
-
+    .net-face { position: relative; }
     .net-face::after {
-      position: absolute;
-      top: 50%;
-      left: 50%;
+      position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 2.5rem;
-      font-weight: bold;
-      color: rgba(0, 0, 0, 0.15);
-      pointer-events: none;
-      z-index: 10;
+      font-size: 2.5rem; font-weight: bold;
+      color: rgba(0, 0, 0, 0.15); pointer-events: none; z-index: 10;
     }
+    #net-U::after { content: "U"; }
+    #net-L::after { content: "L"; }
+    #net-F::after { content: "F"; }
+    #net-R::after { content: "R"; }
+    #net-B::after { content: "B"; }
+    #net-D::after { content: "D"; }
 
-    #net-U::after {
-      content: "U";
-    }
-
-    #net-L::after {
-      content: "L";
-    }
-
-    #net-F::after {
-      content: "F";
-    }
-
-    #net-R::after {
-      content: "R";
-    }
-
-    #net-B::after {
-      content: "B";
-    }
-
-    #net-D::after {
-      content: "D";
-    }
-
-    .net-cell:hover {
-      filter: brightness(0.9);
-      transform: scale(0.95);
-    }
-
+    .net-cell:hover { filter: brightness(0.9); transform: scale(0.95); }
     .net-cell.unpainted {
       background: repeating-linear-gradient(45deg, #e5e7eb, #e5e7eb 4px, #cbd5e1 4px, #cbd5e1 8px);
       box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
     }
 
     /* ===== 左侧步骤面板 ===== */
-    #left-panel {
-      transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
+    #left-panel { transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
     #left-panel-resizer::after {
-      content: "⋮";
-      position: absolute;
-      top: 50%;
-      right: -4px;
-      transform: translateY(-50%);
-      width: 14px;
-      height: 36px;
-      border-radius: 4px;
-      background: #e5e7eb;
-      color: #9ca3af;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      transition: 0.2s;
+      content: "⋮"; position: absolute; top: 50%; right: -4px; transform: translateY(-50%);
+      width: 14px; height: 36px; border-radius: 4px; background: #e5e7eb; color: #9ca3af;
+      display: flex; align-items: center; justify-content: center; font-size: 14px; transition: 0.2s;
     }
-
-    #left-panel-resizer:hover::after,
-    #left-panel-resizer.dragging::after {
-      background: #f97316;
-      color: white;
-    }
-
-    #left-panel-resizer:hover,
-    #left-panel-resizer.dragging {
-      background: rgba(249, 115, 22, 0.12);
-    }
+    #left-panel-resizer:hover::after, #left-panel-resizer.dragging::after { background: #f97316; color: white; }
+    #left-panel-resizer:hover, #left-panel-resizer.dragging { background: rgba(249, 115, 22, 0.12); }
 
     /* 虚拟列表步骤项 */
     .step-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px;
-      border-radius: 8px;
-      border-width: 1px;
-      border-style: solid;
-      font-size: 0.875rem;
-      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
-      height: 40px;
-      margin-bottom: 4px;
-      box-sizing: border-box;
-      cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px; border-radius: 8px; border-width: 1px; border-style: solid;
+      font-size: 0.875rem; transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+      height: 40px; margin-bottom: 4px; box-sizing: border-box; cursor: pointer;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
-
-    .step-item.step-active {
-      border-color: #f97316;
-      background-color: #fff7ed;
-      color: #c2410c;
-    }
-
-    .step-item.step-inactive {
-      border-color: #f3f4f6;
-      background-color: #ffffff;
-      color: #4b5563;
-    }
-
-    .step-item:hover {
-      border-color: #fdba74;
-      background-color: #fff7ed;
-    }
-
-    .step-num {
-      font-weight: bold;
-      color: #9ca3af;
-      margin-right: 4px;
-      flex-shrink: 0;
-    }
-
-    .step-desc {
-      flex: 1;
-      font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
+    .step-item.step-active { border-color: #f97316; background-color: #fff7ed; color: #c2410c; }
+    .step-item.step-inactive { border-color: #f3f4f6; background-color: #ffffff; color: #4b5563; }
+    .step-item:hover { border-color: #fdba74; background-color: #fff7ed; }
+    .step-num { font-weight: bold; color: #9ca3af; margin-right: 4px; flex-shrink: 0; }
+    .step-desc { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .step-badge {
-      font-family: monospace;
-      background: #f3f4f6;
-      color: #ea580c;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      flex-shrink: 0;
-      margin-left: 4px;
+      font-family: monospace; background: #f3f4f6; color: #ea580c;
+      padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; flex-shrink: 0; margin-left: 4px;
     }
 
     /* ===== 右侧面板拖拽条 ===== */
     #panel-resizer::after {
-      content: "⋮";
-      position: absolute;
-      top: 50%;
-      left: -4px;
-      transform: translateY(-50%);
-      width: 14px;
-      height: 36px;
-      border-radius: 4px;
-      background: #e5e7eb;
-      color: #9ca3af;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      transition: 0.2s;
+      content: "⋮"; position: absolute; top: 50%; left: -4px; transform: translateY(-50%);
+      width: 14px; height: 36px; border-radius: 4px; background: #e5e7eb; color: #9ca3af;
+      display: flex; align-items: center; justify-content: center; font-size: 14px; transition: 0.2s;
     }
-
-    #panel-resizer:hover::after,
-    #panel-resizer.dragging::after {
-      background: #f97316;
-      color: white;
-    }
-
-    #panel-resizer:hover,
-    #panel-resizer.dragging {
-      background: rgba(249, 115, 22, 0.12);
-    }
+    #panel-resizer:hover::after, #panel-resizer.dragging::after { background: #f97316; color: white; }
+    #panel-resizer:hover, #panel-resizer.dragging { background: rgba(249, 115, 22, 0.12); }
 
     /* ===== 速度滑块 ===== */
-    #speed-slider {
-      appearance: none;
-      width: 90px;
-      height: 4px;
-      border-radius: 2px;
-      background: #e5e7eb;
-      outline: none;
-      cursor: pointer;
-    }
-
-    #speed-slider::-webkit-slider-thumb {
-      appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #f97316;
-      cursor: pointer;
-      transition: transform 0.15s;
-    }
-
-    #speed-slider::-webkit-slider-thumb:hover {
-      transform: scale(1.2);
-    }
+    #speed-slider { appearance: none; width: 90px; height: 4px; border-radius: 2px; background: #e5e7eb; outline: none; cursor: pointer; }
+    #speed-slider::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #f97316; cursor: pointer; transition: transform 0.15s; }
+    #speed-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
 
     /* ===== 3D 场景 ===== */
-    #scene-container canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      outline: none;
+    #scene-container canvas { 
+      display: block; width: 100%; height: 100%; outline: none; 
+      touch-action: none; 
     }
 
     /* ===== 方向指示器 (Gizmo) ===== */
-    #cube-gizmo {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      width: 90px;
-      height: 90px;
-      z-index: 50;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    #cube-gizmo canvas {
-      width: 100% !important;
-      height: 100% !important;
-      border-radius: 10px;
-    }
-
+    #cube-gizmo { position: absolute; top: 14px; left: 14px; width: 90px; height: 90px; z-index: 50; cursor: pointer; user-select: none; }
+    #cube-gizmo canvas { width: 100% !important; height: 100% !important; border-radius: 10px; }
     #gizmo-tooltip {
-      position: absolute;
-      top: 108px;
-      left: 14px;
-      background: rgba(0, 0, 0, 0.6);
-      color: #fff;
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 6px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s;
-      z-index: 51;
-      white-space: nowrap;
+      position: absolute; top: 108px; left: 14px; background: rgba(0, 0, 0, 0.6);
+      color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 6px;
+      pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 51; white-space: nowrap;
     }
 
     /* ===== 调色板与按钮 ===== */
-    .color-swatch {
-      transition: transform 0.2s, border 0.2s;
-    }
-
-    .color-swatch.active {
-      transform: scale(1.2);
-      border: 3px solid #1f2937;
-      z-index: 10;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .color-swatch.disabled {
-      opacity: 0.3;
-      cursor: not-allowed;
-    }
-
-    .cube-btn:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-    }
-
-    .nav-btn i,
-    .cube-btn i {
-      pointer-events: none;
-    }
-
-    .nav-btn:hover:not(:disabled) {
-      background: #f97316;
-      color: white;
-      transform: scale(1.05);
-    }
-
-    .tab:hover {
-      color: #f97316;
-    }
-
-    .tab.active-tab {
-      color: #f97316 !important;
-      border-bottom-color: #f97316 !important;
-      background: #fffaf5 !important;
-    }
+    .color-swatch { transition: transform 0.2s, border 0.2s; }
+    .color-swatch.active { transform: scale(1.2); border: 3px solid #1f2937; z-index: 10; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+    .color-swatch.disabled { opacity: 0.3; cursor: not-allowed; }
+    .cube-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); }
+    .nav-btn i, .cube-btn i { pointer-events: none; }
+    .nav-btn:hover:not(:disabled) { background: #f97316; color: white; transform: scale(1.05); }
+    .tab:hover { color: #f97316; }
+    .tab.active-tab { color: #f97316 !important; border-bottom-color: #f97316 !important; background: #fffaf5 !important; }
 
     /* ===== 面扫描按钮 ===== */
     .face-scan-btn {
-      position: absolute;
-      width: 26px;
-      height: 26px;
-      background: #1f2937;
-      color: white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      cursor: pointer;
-      z-index: 20;
-      transition: 0.2s;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      position: absolute; width: 26px; height: 26px; background: #1f2937; color: white;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; cursor: pointer; z-index: 20; transition: 0.2s; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
     }
-
-    .face-scan-btn:hover {
-      transform: scale(1.15);
-      background: #f97316;
-    }
-
-    .btn-pos-top {
-      top: -32px;
-      left: 50%;
-      margin-left: -13px;
-    }
-
-    .btn-pos-left {
-      left: -32px;
-      top: 50%;
-      margin-top: -13px;
-    }
-
-    .btn-pos-right {
-      bottom: -32px;
-      right: -32px;
-    }
+    .face-scan-btn:hover { transform: scale(1.15); background: #f97316; }
+    .btn-pos-top { top: -32px; left: 50%; margin-left: -13px; }
+    .btn-pos-left { left: -32px; top: 50%; margin-top: -13px; }
+    .btn-pos-right { bottom: -32px; right: -32px; }
 
     /* ===== 相机扫描模态框 ===== */
     #camera-grid {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      height: 50%;
-      aspect-ratio: 1 / 1;
-      pointer-events: none;
-      display: grid;
-      border: 2px solid #f97316;
-      box-sizing: border-box;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      height: 50%; aspect-ratio: 1 / 1; pointer-events: none; display: grid; border: 2px solid #f97316; box-sizing: border-box;
     }
-
-    .camera-cell {
-      border: 1px dashed rgba(255, 255, 255, 0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .camera-dot {
-      width: 14px;
-      height: 14px;
-      background: #f97316;
-      border-radius: 50%;
-      box-shadow: 0 0 4px white;
-      transition: background-color 0.2s ease;
-    }
-
-    .preview-grid {
-      display: grid;
-      gap: 4px;
-      background: #374151;
-      width: 240px;
-      height: 240px;
-      margin: 0 auto;
-    }
+    .camera-cell { border: 1px dashed rgba(255, 255, 255, 0.7); display: flex; align-items: center; justify-content: center; }
+    .camera-dot { width: 14px; height: 14px; background: #f97316; border-radius: 50%; box-shadow: 0 0 4px white; transition: background-color 0.2s ease; }
+    .preview-grid { display: grid; gap: 4px; background: #374151; width: 240px; height: 240px; margin: 0 auto; }
 
     /* ===== 步骤旋转提示卡片 ===== */
     #move-hint-card {
-      position: fixed;
-      top: 72px;
-      right: 10px;
-      z-index: 200;
-      background: white;
-      border: 2px solid #f97316;
-      border-radius: 16px;
-      padding: 14px 18px;
-      box-shadow: 0 8px 32px rgba(249, 115, 22, 0.18);
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      pointer-events: none;
+      position: fixed; top: 72px; right: 10px; z-index: 200; background: white; border: 2px solid #f97316; border-radius: 16px;
+      padding: 14px 18px; box-shadow: 0 8px 32px rgba(249, 115, 22, 0.18); display: none; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
     }
-
-    #move-hint-card.visible {
-      display: flex;
-    }
-
-    #move-hint-card .hint-cols {
-      display: flex;
-      flex-direction: row;
-      gap: 12px;
-      align-items: center;
-    }
-
-    #move-hint-card .hint-col {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #move-hint-card .hint-icon {
-      font-size: 2.8rem;
-      color: #f97316;
-      line-height: 1;
-    }
-
-    #move-hint-card .hint-deg {
-      position: absolute;
-      top: 50%;
-      left: 51%;
-      transform: translate(-50%, -50%);
-      font-size: 0.85rem;
-      font-weight: 900;
-      color: #1f2937;
-      line-height: 1;
-      pointer-events: none;
-    }
-
-    #move-hint-card .hint-label {
-      font-size: 0.72rem;
-      color: #9ca3af;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
+    #move-hint-card.visible { display: flex; }
+    #move-hint-card .hint-cols { display: flex; flex-direction: row; gap: 12px; align-items: center; }
+    #move-hint-card .hint-col { position: relative; display: flex; align-items: center; justify-content: center; }
+    #move-hint-card .hint-icon { font-size: 2.8rem; color: #f97316; line-height: 1; }
+    #move-hint-card .hint-deg { position: absolute; top: 50%; left: 51%; transform: translate(-50%, -50%); font-size: 0.85rem; font-weight: 900; color: #1f2937; line-height: 1; pointer-events: none; }
+    #move-hint-card .hint-label { font-size: 0.72rem; color: #9ca3af; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 
     /* ===== 关于弹窗 ===== */
-    .about-tab {
-      flex: 1;
-      padding: 9px 0;
-      font-weight: 700;
-      font-size: 0.92rem;
-      border: none;
-      background: none;
-      cursor: pointer;
-      margin-bottom: -2px;
-      transition: color 0.15s;
-      border-bottom: 2px solid transparent;
-    }
-
-    .about-tab-active {
-      color: #f97316;
-      border-bottom-color: #f97316;
-    }
-
-    .about-tab-inactive {
-      color: #9ca3af;
-      border-bottom-color: transparent;
-    }
+    .about-tab { flex: 1; padding: 9px 0; font-weight: 700; font-size: 0.92rem; border: none; background: none; cursor: pointer; margin-bottom: -2px; transition: color 0.15s; border-bottom: 2px solid transparent; }
+    .about-tab-active { color: #f97316; border-bottom-color: #f97316; }
+    .about-tab-inactive { color: #9ca3af; border-bottom-color: transparent; }
 
     /* ===== 滚动条 ===== */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    * { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
 
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
 
-    ::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 3px;
-    }
+    /* ========================================================
+       移动端专属响应式适配 (最大宽度 768px 生效)
+       ======================================================== */
+    @media (max-width: 768px) {
+      /* 隐藏缩放拉条，防止误触 */
+      #left-panel-resizer, #panel-resizer { display: none !important; }
+      
+      /* 自定义涂色模式下，由左右分栏变为上下分栏 */
+      #main-content { flex-direction: column !important; }
+      
+      /* 右侧面板在移动端变为底部面板 */
+      #right-panel {
+        width: 100% !important; max-width: 100% !important; 
+        height: 55%; min-height: 380px; 
+        border-left: none !important; border-top: 1px solid #e5e7eb;
+        padding: 12px 16px !important;
+      }
+      /* 3D视图区适配高度 */
+      #scene-container { flex: 1; min-height: 40%; }
+      
+      /* 左侧步骤抽屉悬浮于界面上方 */
+      #left-panel {
+        position: absolute; height: 100%; z-index: 100;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.2);
+        max-width: 85vw;
+      }
 
-    ::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8;
-    }
+      /* 底部操作按钮容器排布优化：居中、宽度铺满 */
+      #free-controls {
+        bottom: 12px !important; left: 50% !important; transform: translateX(-50%);
+        width: 94%; padding: 8px !important; justify-content: center; gap: 8px !important;
+      }
+      /* 自由模式按钮内边距和字号微调 */
+      .cube-btn { padding: 8px 12px !important; font-size: 0.8rem !important; flex: 1; justify-content: center; }
 
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: #94a3b8 transparent;
+      /* 播放导航栏排布优化：宽度限制、圆角缩小、间距变小 */
+      #navigator {
+        bottom: 12px !important; width: 94vw !important; max-width: 94vw !important; border-radius: 16px !important;
+        padding: 10px 12px !important; gap: 8px !important; justify-content: center !important;
+      }
+      /* 播放步骤信息调整到导航栏最上方 */
+      #nav-text { order: -1; width: 100%; margin-bottom: 4px; font-size: 13px !important; }
+      /* 导航圆圈按钮缩小 */
+      .nav-btn { width: 34px !important; height: 34px !important; font-size: 13px !important; }
+      /* 速度滑块排布调整 */
+      #speed-control { border-left: none !important; padding-left: 0 !important; width: 100%; justify-content: center; order: 10; margin-top: 2px; }
+      #speed-slider { width: 70px !important; }
+
+      /* 左上角视角方块缩小 */
+      #cube-gizmo { transform: scale(0.7); transform-origin: top left; top: 5px !important; left: 5px !important; }
+      #gizmo-tooltip { display: none !important; }
+      
+      /* 右上角旋转提示卡片缩小并避让顶部栏 */
+      #move-hint-card { top: 60px !important; right: 5px !important; padding: 10px !important; transform: scale(0.85); transform-origin: top right; }
+
+      /* 2D 展开图网格内的文字缩小 */
+      .net-face::after { font-size: 1.5rem !important; }
     }
   </style>
   <base target="_blank" />
 </head>
 
 <body class="m-0 p-0 bg-gray-100 text-gray-800 font-sans flex flex-col h-screen overflow-hidden select-none">
+<!-- ==================== 移动端专属顶部 Logo 栏 ==================== -->
+  <div class="md:hidden flex items-center justify-center gap-2 bg-white py-2.5 border-b border-gray-100 z-50 shadow-sm relative">
+    <img src="./img/logo.jpg" class="w-6 h-6 object-contain rounded-md shadow-sm" />
+    <span class="text-lg font-extrabold text-gray-800 tracking-tight">EasyCube 易魔方</span>
+  </div>
 
   <!-- ==================== 顶部导航栏 ==================== -->
   <div id="top-bar"
-    class="flex justify-between items-center bg-white px-5 shadow-sm z-50 h-[60px] border-b border-gray-200 relative">
-    <div class="flex items-center gap-2.5 font-semibold">
-      <i class="fas fa-cube text-orange-500"></i> <span>魔方阶数:</span>
+    class="flex justify-between items-center bg-white px-2 md:px-5 shadow-sm z-40 h-[52px] md:h-[60px] border-b border-gray-200 relative">
+    <div class="flex items-center gap-1 md:gap-2.5 font-semibold text-sm md:text-base">
+      <i class="fas fa-cube text-orange-500 hidden sm:block"></i> 
+      <span class="hidden md:inline">魔方阶数:</span>
       <select id="dim-select" onchange="onDimSelectChange(this.value)"
-        class="py-1.5 px-2 bg-white border border-gray-300 rounded-md text-center font-bold outline-none focus:border-orange-500 cursor-pointer">
+        class="py-1 px-1 md:py-1.5 md:px-2 bg-white border border-gray-300 rounded-md text-center font-bold outline-none focus:border-orange-500 cursor-pointer text-sm md:text-base">
         <option value="2">2×2</option>
         <option value="3" selected>3×3</option>
         <option value="4">4×4</option>
@@ -555,54 +255,54 @@
         <option value="13">13×13</option>
         <option value="14">14×14</option>
         <option value="15">15×15</option>
-        <option value="custom">自定义</option>
+        <option value="custom">自定</option>
       </select>
       <input type="number" id="dim-input" value="3" min="2" max="50" onchange="onDimCustomChange()" placeholder="2~50"
-        class="w-[60px] py-1.5 px-1 bg-white border border-orange-400 rounded-md text-center font-bold outline-none focus:border-orange-500 hidden" />
-
+        class="w-[45px] md:w-[60px] py-1 px-1 md:py-1.5 md:px-1 bg-white border border-orange-400 rounded-md text-center font-bold outline-none focus:border-orange-500 hidden text-sm md:text-base" />
 
       <div id="solver-settings-container"
-        class="flex items-center gap-4 ml-3 border-l border-gray-200 pl-4 transition-opacity duration-300">
-        <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-600"
+        class="flex items-center gap-2 md:gap-4 ml-1 md:ml-3 border-l border-gray-200 pl-2 md:pl-4 transition-opacity duration-300">
+        <label class="flex items-center gap-1.5 cursor-pointer text-xs md:text-sm text-gray-600"
           title="开启: Kociemba极速算法&#10;关闭: IDA*算法搜索(步数少，适合15步以内打乱)">
-          <span>快速模式</span>
+          <span class="hidden md:inline">快速模式</span><span class="md:hidden font-bold">极速</span>
           <div class="relative">
             <input type="checkbox" id="fast-mode-toggle" class="sr-only peer" checked
               onchange="const w=document.getElementById('solver-timeout-wrapper'); this.checked ? (w.classList.add('hidden'), w.classList.remove('flex')) : (w.classList.remove('hidden'), w.classList.add('flex'))">
             <div
-              class="w-9 h-5 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500">
+              class="w-7 md:w-9 h-4 md:h-5 bg-gray-300 rounded-full peer peer-checked:after:translate-x-[12px] md:peer-checked:after:translate-x-full after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 md:after:h-4 after:w-3 md:after:w-4 after:transition-all peer-checked:bg-orange-500">
             </div>
           </div>
         </label>
 
         <div id="solver-timeout-wrapper"
-          class="items-center gap-1 text-sm text-gray-600 transition-all duration-200 hidden" title="IDA* 搜索超时时间">
-          超时
+          class="items-center gap-1 text-xs md:text-sm text-gray-600 transition-all duration-200 hidden" title="IDA* 搜索超时时间">
+          <span class="hidden md:inline">超时</span>
           <input type="number" id="solver-timeout-input" value="180" min="1" max="999"
-            class="w-[3.5em] py-1 border border-gray-300 rounded text-center outline-none focus:border-orange-500" />
-          秒
+            class="w-[3em] md:w-[3.5em] py-0.5 md:py-1 border border-gray-300 rounded text-center outline-none focus:border-orange-500" />
+          <span class="hidden md:inline">秒</span>
         </div>
       </div>
-
     </div>
-    <div
-      class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
-      <img src="./img/logo.jpg" class="w-8 h-8 object-contain rounded-md" />
+    
+    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 pointer-events-none">
+      <img src="./img/logo.jpg" class="w-8 h-8 object-contain rounded-md shadow-sm" />
       <span class="text-xl font-extrabold text-gray-800 tracking-tight">EasyCube 易魔方</span>
     </div>
-    <div class="tabs flex h-full">
+    
+    <div class="tabs flex h-full text-xs md:text-base z-10">
       <div id="tab-free"
-        class="tab active-tab flex items-center gap-2 px-6 cursor-pointer font-semibold text-gray-500 border-b-[3px] border-transparent transition-colors"
+        class="tab active-tab flex items-center gap-1 md:gap-2 px-3 md:px-6 cursor-pointer font-semibold text-gray-500 border-b-[3px] border-transparent transition-colors"
         onclick="switchMode('free')">
-        <i class="fas fa-hand-pointer"></i> 自由模式
+        <i class="fas fa-hand-pointer"></i> <span class="hidden md:inline">自由模式</span><span class="md:hidden">自由</span>
       </div>
       <div id="tab-custom"
-        class="tab flex items-center gap-2 px-6 cursor-pointer font-semibold text-gray-500 border-b-[3px] border-transparent transition-colors"
+        class="tab flex items-center gap-1 md:gap-2 px-3 md:px-6 cursor-pointer font-semibold text-gray-500 border-b-[3px] border-transparent transition-colors"
         onclick="switchMode('custom')">
-        <i class="fas fa-palette"></i> 自定义模式
+        <i class="fas fa-palette"></i> <span class="hidden md:inline">自定义模式</span><span class="md:hidden">自定</span>
       </div>
     </div>
   </div>
+  
   <!-- ==================== 主内容区域 ==================== -->
   <div id="main-content" class="flex flex-1 relative overflow-hidden">
 
@@ -641,28 +341,31 @@
         <button id="btn-cancel-solve" onclick="cancelSolve()"
           class="text-red-800 text-sm cursor-pointer m-1 p-1">取消求解</button>
       </div>
+      
       <div id="free-controls"
         class="absolute bottom-8 left-8 flex gap-3 z-10 bg-white/80 p-2.5 rounded-xl shadow-sm backdrop-blur border border-gray-200">
         <button
           class="cube-btn flex items-center gap-2 py-2.5 px-4 border border-orange-200 text-orange-600 hover:bg-orange-50 rounded-lg bg-white font-semibold text-sm transition-colors"
           onclick="document.getElementById('import-input').click()" title="加载进度">
-          <i class="fas fa-folder-open"></i> 加载
+          <i class="fas fa-folder-open"></i> <span>加载</span>
         </button>
         <button
           class="cube-btn flex items-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white font-semibold text-sm"
-          onclick="initCube()"><i class="fas fa-sync-alt"></i> 重置</button>
+          onclick="initCube()"><i class="fas fa-sync-alt"></i> <span>重置</span></button>
         <button
           class="cube-btn flex items-center gap-2 py-2.5 px-4 border border-gray-300 rounded-lg bg-white font-semibold text-sm"
-          onclick="scrambleCube()"><i class="fas fa-random"></i> 打乱</button>
+          onclick="scrambleCube()"><i class="fas fa-random"></i> <span>打乱</span></button>
 
         <button id="btn-solve-free"
           class="cube-btn cube-btn-primary flex items-center gap-2 py-2.5 px-4 border border-orange-500 rounded-lg bg-orange-500 text-white font-semibold text-sm opacity-50 cursor-not-allowed"
           disabled  onclick="initSolve('free')">
-          <i class="fas fa-gears"></i> 求解
+          <i class="fas fa-gears"></i> <span>求解</span>
         </button>
       </div>
+      
       <!-- 右上角步骤旋转提示卡片 -->
       <div id="move-hint-card"></div>
+      
       <div id="navigator"
         class="w-max absolute bottom-8 left-1/2 -translate-x-1/2 bg-white border border-gray-200 px-6 py-3 rounded-[30px] hidden gap-4 items-center shadow-xl z-50 flex-wrap justify-center max-w-[90vw]">
         <button class="nav-btn w-[42px] h-[42px] rounded-full flex justify-center items-center text-base bg-gray-100"
@@ -711,6 +414,7 @@
         </button>
       </div>
     </div>
+    
     <!-- 右侧：2D 涂色面板 -->
     <div id="right-panel"
       class="w-[40vw] min-w-[280px] max-w-[80vw] bg-white border-l border-gray-200 hidden z-20 flex-col p-6 box-border overflow-y-auto shadow-sm relative flex-shrink-0">
@@ -725,64 +429,35 @@
       <!-- 2D 展开图 -->
       <div id="net-container" class="grid gap-1.5 mb-5 [grid-template-columns:repeat(4,1fr)] [aspect-ratio:4/3]">
         <div class="relative pos-U">
-          <div
-            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
-            id="net-U"></div>
-          <button class="face-scan-btn btn-pos-left" title="扫描 U 面（顶面）" onclick="openCameraModal('U')">
-            <i class="fas fa-camera"></i>
-          </button>
+          <div class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full" id="net-U"></div>
+          <button class="face-scan-btn btn-pos-left" title="扫描 U 面（顶面）" onclick="openCameraModal('U')"><i class="fas fa-camera"></i></button>
         </div>
-        <!-- L 面 (左面) -->
         <div class="relative pos-L">
-          <div
-            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
-            id="net-L"></div>
-          <button class="face-scan-btn btn-pos-top" title="扫描 L 面（左面）" onclick="openCameraModal('L')">
-            <i class="fas fa-camera"></i>
-          </button>
+          <div class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full" id="net-L"></div>
+          <button class="face-scan-btn btn-pos-top" title="扫描 L 面（左面）" onclick="openCameraModal('L')"><i class="fas fa-camera"></i></button>
         </div>
-        <!-- F 面 (前面，中心位置) -->
         <div class="relative pos-F">
-          <div
-            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
-            id="net-F"></div>
-          <button class="face-scan-btn btn-pos-right" title="扫描 F 面（前面）" onclick="openCameraModal('F')">
-            <i class="fas fa-camera"></i>
-          </button>
+          <div class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full" id="net-F"></div>
+          <button class="face-scan-btn btn-pos-right" title="扫描 F 面（前面）" onclick="openCameraModal('F')"><i class="fas fa-camera"></i></button>
         </div>
-        <!-- R 面 (右面) -->
         <div class="relative pos-R">
-          <div
-            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
-            id="net-R"></div>
-          <button class="face-scan-btn btn-pos-top" title="扫描 R 面（右面）" onclick="openCameraModal('R')">
-            <i class="fas fa-camera"></i>
-          </button>
+          <div class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full" id="net-R"></div>
+          <button class="face-scan-btn btn-pos-top" title="扫描 R 面（右面）" onclick="openCameraModal('R')"><i class="fas fa-camera"></i></button>
         </div>
-        <!-- B 面 (后面) -->
         <div class="relative pos-B">
-          <div
-            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
-            id="net-B"></div>
-          <button class="face-scan-btn btn-pos-top" title="扫描 B 面（后面）" onclick="openCameraModal('B')">
-            <i class="fas fa-camera"></i>
-          </button>
+          <div class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full" id="net-B"></div>
+          <button class="face-scan-btn btn-pos-top" title="扫描 B 面（后面）" onclick="openCameraModal('B')"><i class="fas fa-camera"></i></button>
         </div>
-        <!-- D 面 (底面，位于底部) -->
         <div class="relative pos-D">
-          <div
-            class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full"
-            id="net-D"></div>
-          <button class="face-scan-btn btn-pos-left" title="扫描 D 面（底面）" onclick="openCameraModal('D')">
-            <i class="fas fa-camera"></i>
-          </button>
+          <div class="net-face grid gap-0.5 border-2 border-gray-400 bg-gray-300 rounded aspect-square overflow-hidden p-px w-full h-full" id="net-D"></div>
+          <button class="face-scan-btn btn-pos-left" title="扫描 D 面（底面）" onclick="openCameraModal('D')"><i class="fas fa-camera"></i></button>
         </div>
       </div>
       <div id="status-text" class="text-center text-gray-500 text-[13px] mt-1 font-medium">已填充: 0 / 54</div>
       <button id="btn-solve-custom"
         class="cube-btn cube-btn-primary flex items-center justify-center gap-2 py-2.5 px-4 border border-orange-500 rounded-lg bg-orange-500 text-white cursor-pointer font-semibold text-sm transition-all w-full mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
         disabled onclick="initSolve('custom')">
-        <i class="fas fa-lock"></i> 完成涂色后解锁
+        <i class="fas fa-lock"></i> <span>完成涂色后解锁</span>
       </button>
     </div>
   </div>
@@ -1247,9 +922,7 @@
         currentWorkerResolve = null;
       }
 
-      // 取消 Kociemba / NxN / 捷径 等同步求解（设置标志，中断后续流程）
-      // isSolvingCanceled 已设为 true，initSolve 在 await 处会检查并 return
-
+    
       // 重置求解相关状态
       solveQueue = [];
       solveType = "algorithmic";
@@ -2004,8 +1677,10 @@
     // ============================================================================
     // [5] 交互式层拖拽 (Three.js Raycaster) 与 旋转动画
     // ============================================================================
-    const raycaster = new THREE.Raycaster();
-    renderer.domElement.addEventListener("mousedown", (e) => {
+ const raycaster = new THREE.Raycaster();
+    
+    // 改用 pointerdown 兼容鼠标与手指触摸
+    renderer.domElement.addEventListener("pointerdown", (e) => {
       const rect = renderer.domElement.getBoundingClientRect();
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -2028,7 +1703,8 @@
       }
     });
 
-    document.addEventListener("mouseup", async (e) => {
+    // 改用 pointerup
+    document.addEventListener("pointerup", async (e) => {
       isDraggingScene = false;
       if (dragInfo && !isAnimating && mode === "free") {
         let dx = e.clientX - dragInfo.startX;
@@ -2072,7 +1748,8 @@
       dragInfo = null;
     });
 
-    document.addEventListener("mousemove", (e) => {
+    // 改用 pointermove
+    document.addEventListener("pointermove", (e) => {
       if (isDraggingScene) {
         sceneRotation.y -= (e.clientX - prevMouse.x) * 0.6;
         sceneRotation.x += (e.clientY - prevMouse.y) * 0.6;
@@ -2169,7 +1846,6 @@
       }
       isScrambled = true;
       updateSolveButtonState();
-      //console.log(moveHistory.map(m => getMoveName(m)).join(' '));
     }
     
 
